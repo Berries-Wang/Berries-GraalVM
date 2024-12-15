@@ -856,10 +856,10 @@ final class ReflectionPluginsTracingFeature implements InternalFeature {
 
     private abstract static class TraceEntry {
 
-        protected List<StackTraceElement> callStack;
-        protected ResolvedJavaMethod targetMethod;
-        protected Object targetCaller;
-        protected Object[] targetArguments;
+        private final List<StackTraceElement> callStack;
+        private final ResolvedJavaMethod targetMethod;
+        private final Object targetCaller;
+        private final Object[] targetArguments;
 
         TraceEntry(List<StackTraceElement> callStack, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments) {
             this.callStack = callStack;
@@ -898,7 +898,7 @@ final class ReflectionPluginsTracingFeature implements InternalFeature {
 
     private static class ConstantTraceEntry extends TraceEntry {
 
-        protected Object value;
+        private final Object value;
 
         ConstantTraceEntry(List<StackTraceElement> callStack, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Object value) {
             super(callStack, targetMethod, targetCaller, targetArguments);
@@ -919,7 +919,7 @@ final class ReflectionPluginsTracingFeature implements InternalFeature {
 
     private static class ExceptionTraceEntry extends TraceEntry {
 
-        protected Class<? extends Throwable> exceptionClass;
+        private final Class<? extends Throwable> exceptionClass;
 
         ExceptionTraceEntry(List<StackTraceElement> callStack, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Class<? extends Throwable> exceptionClass) {
             super(callStack, targetMethod, targetCaller, targetArguments);
