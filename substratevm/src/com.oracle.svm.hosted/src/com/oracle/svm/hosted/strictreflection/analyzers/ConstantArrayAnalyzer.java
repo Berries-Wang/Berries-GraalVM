@@ -51,7 +51,7 @@ public class ConstantArrayAnalyzer<T> {
     private final ControlFlowGraphNode<SourceValue>[] frames;
     private final ConstantValueAnalyzer<T> valueAnalyzer;
 
-    private final static Set<String> safeMethodCalls = new HashSet<>() {
+    private static final Set<String> safeMethodCalls = new HashSet<>() {
         {
             add(Utils.encodeMethodCall("java/lang/Class", "getMethod", "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;"));
             add(Utils.encodeMethodCall("java/lang/Class", "getDeclaredMethod", "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;"));
