@@ -1,6 +1,5 @@
-package com.oracle.svm.hosted.strictreflection.analyzers;
+package com.oracle.svm.hosted.strictreflection;
 
-import com.oracle.svm.hosted.strictreflection.ControlFlowGraphNode;
 import jdk.internal.org.objectweb.asm.tree.analysis.Analyzer;
 import jdk.internal.org.objectweb.asm.tree.analysis.Frame;
 import jdk.internal.org.objectweb.asm.tree.analysis.Interpreter;

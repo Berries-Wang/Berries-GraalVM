@@ -10,7 +10,6 @@ import com.oracle.svm.hosted.FeatureImpl;
 import com.oracle.svm.hosted.strictreflection.analyzers.ConstantArrayAnalyzer;
 import com.oracle.svm.hosted.strictreflection.analyzers.ConstantClassAnalyzer;
 import com.oracle.svm.hosted.strictreflection.analyzers.ConstantStringAnalyzer;
-import com.oracle.svm.hosted.strictreflection.analyzers.ControlFlowGraphAnalyzer;
 import com.oracle.svm.util.ClassUtil;
 import jdk.graal.compiler.options.Option;
 import jdk.internal.org.objectweb.asm.ClassReader;
