@@ -31,14 +31,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.BiPredicate;
+import java.util.function.BiFunction;
 
 @AutomaticallyRegisteredFeature
 public class StrictConstantReflectionFeature implements InternalFeature {
 
     public static class Options {
         @Option(help = "Enable an optimization independent constant reflection analysis.")
-        public static final HostedOptionKey<Boolean> StrictConstantReflection = new HostedOptionKey<>(false);
+        static final HostedOptionKey<Boolean> StrictConstantReflection = new HostedOptionKey<>(false);
+
+        @Option(help = "Specify the log location for reflection calls registered by the strict constant reflection feature.")
+        static final HostedOptionKey<String> StrictConstantReflectionLog = new HostedOptionKey<>(null);
     }
 
     private static final Set<AnalysisMethod> analyzedMethods = ConcurrentHashMap.newKeySet();
@@ -61,17 +64,10 @@ public class StrictConstantReflectionFeature implements InternalFeature {
 
         boolean newReflectionRegistration = false;
         for (AnalysisMethod method : methodsToAnalyze) {
-            ClassNode classNode = getClassBytecode(method.getDeclaringClass());
-            if (classNode == null) {
+            if (!method.hasBytecodes()) {
                 continue;
             }
-
-            MethodNode methodNode = findMethodNode(method, classNode.methods);
-            if (methodNode == null) {
-                continue;
-            }
-
-            newReflectionRegistration |= analyzeMethod(methodNode, classNode);
+            newReflectionRegistration |= analyzeMethod(method);
         }
 
         if (newReflectionRegistration) {
@@ -109,10 +105,20 @@ public class StrictConstantReflectionFeature implements InternalFeature {
         return null;
     }
 
-    private boolean analyzeMethod(MethodNode methodNode, ClassNode contextClassNode) {
+    private boolean analyzeMethod(AnalysisMethod method) {
+        ClassNode classNode = getClassBytecode(method.getDeclaringClass());
+        if (classNode == null) {
+            return false;
+        }
+
+        MethodNode methodNode = findMethodNode(method, classNode.methods);
+        if (methodNode == null) {
+            return false;
+        }
+
         Analyzer<SourceValue> analyzer = new ControlFlowGraphAnalyzer<>(new SourceInterpreter());
         try {
-            analyzer.analyze(contextClassNode.name, methodNode);
+            analyzer.analyze(classNode.name, methodNode);
         } catch (AnalyzerException e) {
             throw new RuntimeException(e);
         }
@@ -131,18 +137,40 @@ public class StrictConstantReflectionFeature implements InternalFeature {
         );
         Map<MethodInsnNode, Object> constantCalls = new HashMap<>();
 
-        boolean callRegistered = false;
+        /*
+         * ASM internally reorders constant pool entries, which can result in certain instructions
+         * getting replaced with their wide versions or vice-versa (i.e. LDC and LDC_W). This causes
+         * a mismatch in BCIs in the original bytecode and ASM analyzed bytecode, so we're using the
+         * bytecode stream from the JVM CI object for logging purposes.
+         */
+        StrictConstantReflectionFeatureLogger logger = new StrictConstantReflectionFeatureLogger(method);
+
+        boolean hasConstantReflection = false;
         for (int i = 0; i < instructions.length; i++) {
             if (instructions[i] instanceof MethodInsnNode methodCall) {
-                BiPredicate<AnalyzerSuite, CallContext> handler = ConstantCallHandlers.get(Utils.encodeMethodCall(methodCall));
+                BiFunction<AnalyzerSuite, CallContext, Object> handler = ConstantCallHandlers.get(Utils.encodeMethodCall(methodCall));
                 if (handler == null) {
+                    logger.moveToNextInvocation();
                     continue;
                 }
-                callRegistered |= handler.test(analyzerSuite, new CallContext(frames[i], methodCall, constantCalls));
+                Object result = handler.apply(analyzerSuite, new CallContext(frames[i], methodCall, constantCalls));
+                if (result != null) {
+                    hasConstantReflection = true;
+                    logger.createLogEntry(result);
+                }
+                logger.moveToNextInvocation();
             }
         }
 
-        return callRegistered;
+        return hasConstantReflection;
+    }
+
+    @Override
+    public void afterAnalysis(AfterAnalysisAccess access) {
+        String logLocation = Options.StrictConstantReflectionLog.getValue();
+        if (logLocation != null) {
+            StrictConstantReflectionFeatureLogger.dumpLog(logLocation);
+        }
     }
 }
 

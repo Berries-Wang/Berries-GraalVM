@@ -19,6 +19,6 @@ public class Utils {
     }
 
     public static String encodeMethodCall(String owner, String name, String desc) {
-        return owner + ":" + name + ":" + desc;
+        return owner + "." + name + ":" + desc;
     }
 }

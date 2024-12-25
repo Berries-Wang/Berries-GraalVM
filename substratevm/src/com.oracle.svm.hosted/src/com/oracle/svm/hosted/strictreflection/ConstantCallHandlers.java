@@ -12,15 +12,15 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.BiPredicate;
+import java.util.function.BiFunction;
 
 class ConstantCallHandlers {
 
-    public static BiPredicate<AnalyzerSuite, CallContext> get(String encodedMethod) {
+    public static BiFunction<AnalyzerSuite, CallContext, Object> get(String encodedMethod) {
         return reflectiveCallHandlers.get(encodedMethod);
     }
 
-    private static final Map<String, BiPredicate<AnalyzerSuite, CallContext>> reflectiveCallHandlers = new HashMap<>() {
+    private static final Map<String, BiFunction<AnalyzerSuite, CallContext, Object>> reflectiveCallHandlers = new HashMap<>() {
         {
             put(Utils.encodeMethodCall("java/lang/Class", "forName", "(Ljava/lang/String;)Ljava/lang/Class;"), ConstantCallHandlers::classAccessHandler);
             put(Utils.encodeMethodCall("java/lang/Class", "getField", "(Ljava/lang/String;)Ljava/lang/reflect/Field;"), ConstantCallHandlers::fieldAccessHandler);
@@ -32,29 +32,30 @@ class ConstantCallHandlers {
         }
     };
 
-    private static boolean classAccessHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+    private static Object classAccessHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
         Optional<String> className = inferConstant(analyzerSuite.stringAnalyzer(), callContext, 0);
 
         if (className.isEmpty()) {
-            return false;
+            return null;
         }
 
         RuntimeReflection.registerClassLookup(className.get());
         try {
             Class<?> clazz = Class.forName(className.get(), false, ClassLoader.getSystemClassLoader());
             callContext.constantCalls().put(callContext.callSite(), clazz);
+            return clazz;
         } catch (ClassNotFoundException e) {
             // The call will throw an exception during runtime - ignore for the rest of the analysis.
+            return e;
         }
-        return true;
     }
 
-    private static boolean fieldAccessHandler(AnalyzerSuite analyzerSuite, CallContext callContext, boolean declaredOnly) {
+    private static Object fieldAccessHandler(AnalyzerSuite analyzerSuite, CallContext callContext, boolean declaredOnly) {
         Optional<Class<?>> clazz = inferConstant(analyzerSuite.classAnalyzer(), callContext, 0);
         Optional<String> fieldName = inferConstant(analyzerSuite.stringAnalyzer(), callContext, 1);
 
         if (clazz.isEmpty() || fieldName.isEmpty()) {
-            return false;
+            return null;
         }
 
         RuntimeReflection.registerFieldLookup(clazz.get(), fieldName.get());
@@ -63,26 +64,27 @@ class ConstantCallHandlers {
                     ? clazz.get().getDeclaredField(fieldName.get())
                     : clazz.get().getField(fieldName.get());
             callContext.constantCalls().put(callContext.callSite(), field);
+            return field;
         } catch (NoSuchFieldException e) {
             // The call will throw an exception during runtime - ignore for the rest of the analysis.
+            return e;
         }
-        return true;
     }
 
-    private static boolean fieldAccessHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+    private static Object fieldAccessHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
         return fieldAccessHandler(analyzerSuite, callContext, false);
     }
 
-    private static boolean declaredFieldAccessHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+    private static Object declaredFieldAccessHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
         return fieldAccessHandler(analyzerSuite, callContext, true);
     }
 
-    private static boolean constructorAccessHandler(AnalyzerSuite analyzerSuite, CallContext callContext, boolean declaredOnly) {
+    private static Object constructorAccessHandler(AnalyzerSuite analyzerSuite, CallContext callContext, boolean declaredOnly) {
         Optional<Class<?>> clazz = inferConstant(analyzerSuite.classAnalyzer(), callContext, 0);
         Optional<ArrayList<Class<?>>> paramTypes = inferConstant(analyzerSuite.classArrayAnalyzer(), callContext, 1);
 
         if (clazz.isEmpty() || paramTypes.isEmpty()) {
-            return false;
+            return null;
         }
 
         Class<?>[] paramTypesArr = paramTypes.get().toArray(Class[]::new);
@@ -92,27 +94,28 @@ class ConstantCallHandlers {
                     ? clazz.get().getDeclaredConstructor(paramTypesArr)
                     : clazz.get().getConstructor(paramTypesArr);
             callContext.constantCalls().put(callContext.callSite(), constructor);
+            return constructor;
         } catch (NoSuchMethodException e) {
             // The call will throw an exception during runtime - ignore for the rest of the analysis.
+            return e;
         }
-        return true;
     }
 
-    private static boolean constructorAccessHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+    private static Object constructorAccessHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
         return constructorAccessHandler(analyzerSuite, callContext, false);
     }
 
-    private static boolean declaredConstructorAccessHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+    private static Object declaredConstructorAccessHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
         return constructorAccessHandler(analyzerSuite, callContext, true);
     }
 
-    private static boolean methodAccessHandler(AnalyzerSuite analyzerSuite, CallContext callContext, boolean declaredOnly) {
+    private static Object methodAccessHandler(AnalyzerSuite analyzerSuite, CallContext callContext, boolean declaredOnly) {
         Optional<Class<?>> clazz = inferConstant(analyzerSuite.classAnalyzer(), callContext, 0);
         Optional<String> methodName = inferConstant(analyzerSuite.stringAnalyzer(), callContext, 1);
         Optional<ArrayList<Class<?>>> paramTypes = inferConstant(analyzerSuite.classArrayAnalyzer(), callContext, 2);
 
         if (clazz.isEmpty() || methodName.isEmpty() || paramTypes.isEmpty()) {
-            return false;
+            return null;
         }
 
         Class<?>[] paramTypesArr = paramTypes.get().toArray(Class[]::new);
@@ -122,17 +125,18 @@ class ConstantCallHandlers {
                     ? clazz.get().getDeclaredMethod(methodName.get(), paramTypesArr)
                     : clazz.get().getMethod(methodName.get(), paramTypesArr);
             callContext.constantCalls().put(callContext.callSite(), method);
+            return method;
         } catch (NoSuchMethodException e) {
             // The call will throw an exception during runtime - ignore for the rest of the analysis.
+            return e;
         }
-        return true;
     }
 
-    private static boolean methodAccessHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+    private static Object methodAccessHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
         return methodAccessHandler(analyzerSuite, callContext, false);
     }
 
-    private static boolean declaredMethodAccessHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+    private static Object declaredMethodAccessHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
         return methodAccessHandler(analyzerSuite, callContext, true);
     }
 
