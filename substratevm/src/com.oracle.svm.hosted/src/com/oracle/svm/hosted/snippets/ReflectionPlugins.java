@@ -779,6 +779,9 @@ public final class ReflectionPlugins {
 
     private void traceConstant(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Object value) {
         if (ReflectionPluginsTracingFeature.isEnabled() && reason.duringAnalysis() && reason != ParsingReason.JITCompilation) {
+            if (ReflectionPluginsTracingFeature.Options.ReflectionPluginTraceUserOnly.getValue() && !isUserProvided(b)) {
+                return;
+            }
             List<StackTraceElement> callStack = b.getCallStack();
             b.add(ReachabilityRegistrationNode.create(() -> ReflectionPluginsTracingFeature.traceConstant(callStack, targetMethod, targetCaller, targetArguments, value), reason));
         }
@@ -786,9 +789,24 @@ public final class ReflectionPlugins {
 
     private void traceException(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Class<? extends Throwable> exceptionClass) {
         if (ReflectionPluginsTracingFeature.isEnabled() && reason.duringAnalysis() && reason != ParsingReason.JITCompilation) {
+            if (ReflectionPluginsTracingFeature.Options.ReflectionPluginTraceUserOnly.getValue() && !isUserProvided(b)) {
+                return;
+            }
             List<StackTraceElement> callStack = b.getCallStack();
             b.add(ReachabilityRegistrationNode.create(() -> ReflectionPluginsTracingFeature.traceException(callStack, targetMethod, targetCaller, targetArguments, exceptionClass), reason));
         }
+    }
+
+    private boolean isUserProvided(GraphBuilderContext b) {
+        TypeResult<Class<?>> clazz = imageClassLoader.findClass(b.getMethod().getDeclaringClass().toJavaName());
+        if (!clazz.isPresent()) {
+            return false;
+        }
+        /*
+         * Check if the provided context is in a user-provided class by checking if
+         * it's been loaded directly by NativeImageClassLoader.
+         */
+        return clazz.get().getClassLoader() == imageClassLoader.getClassLoader();
     }
 }
 
@@ -808,6 +826,9 @@ final class ReflectionPluginsTracingFeature implements InternalFeature {
                 throw UserError.invalidOptionValue(key, key.getValue(), "Value must be either \"json\" or \"plain\".");
             }
         });
+
+        @Option(help = "Log only the constant folding occurring in user provided application classes.")
+        static final HostedOptionKey<Boolean> ReflectionPluginTraceUserOnly = new HostedOptionKey<>(true);
     }
 
     private static final Queue<TraceEntry> log = new ConcurrentLinkedDeque<>();
