@@ -70,7 +70,7 @@ class StrictConstantReflectionFeatureLogger {
         public void toJson(JsonBuilder.ObjectBuilder builder) throws IOException {
                 builder.append("location", location);
                 builder.append("targetMethod", targetMethod.format("%H.%n(%p)"));
-                builder.append("result", result);
+                builder.append("result", result instanceof Object[] resultArray ? Arrays.toString(resultArray) : result);
             }
         }
 }

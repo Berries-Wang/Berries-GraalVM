@@ -7,7 +7,9 @@ import com.oracle.svm.core.feature.AutomaticallyRegisteredFeature;
 import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.option.HostedOptionKey;
 import com.oracle.svm.hosted.FeatureImpl;
+import com.oracle.svm.hosted.ImageClassLoader;
 import com.oracle.svm.hosted.strictreflection.analyzers.ConstantArrayAnalyzer;
+import com.oracle.svm.hosted.strictreflection.analyzers.ConstantBooleanAnalyzer;
 import com.oracle.svm.hosted.strictreflection.analyzers.ConstantClassAnalyzer;
 import com.oracle.svm.hosted.strictreflection.analyzers.ConstantStringAnalyzer;
 import com.oracle.svm.util.ClassUtil;
@@ -54,11 +56,13 @@ public class StrictConstantReflectionFeature implements InternalFeature {
         }
 
         AnalysisUniverse universe = ((FeatureImpl.DuringAnalysisAccessImpl) access).getUniverse();
+        ImageClassLoader loader = ((FeatureImpl.DuringAnalysisAccessImpl) access).getImageClassLoader();
 
         List<AnalysisMethod> methodsToAnalyze = universe.getMethods().stream()
                 .filter(m -> !analyzedMethods.contains(m))
                 .filter(AnalysisMethod::isReachable)
                 .filter(m -> !m.isInBaseLayer())
+                .filter(m -> m.getDeclaringClass().getJavaClass().getClassLoader() == loader.getClassLoader())
                 .toList();
         analyzedMethods.addAll(methodsToAnalyze);
 
@@ -132,6 +136,7 @@ public class StrictConstantReflectionFeature implements InternalFeature {
 
         AnalyzerSuite analyzerSuite = new AnalyzerSuite(
                 new ConstantStringAnalyzer(instructions, frames),
+                new ConstantBooleanAnalyzer(instructions, frames),
                 new ConstantClassAnalyzer(instructions, frames),
                 new ConstantArrayAnalyzer<>(instructions, frames, new ConstantClassAnalyzer(instructions, frames))
         );
@@ -149,14 +154,12 @@ public class StrictConstantReflectionFeature implements InternalFeature {
         for (int i = 0; i < instructions.length; i++) {
             if (instructions[i] instanceof MethodInsnNode methodCall) {
                 BiFunction<AnalyzerSuite, CallContext, Object> handler = ConstantCallHandlers.get(Utils.encodeMethodCall(methodCall));
-                if (handler == null) {
-                    logger.moveToNextInvocation();
-                    continue;
-                }
-                Object result = handler.apply(analyzerSuite, new CallContext(frames[i], methodCall, constantCalls));
-                if (result != null) {
-                    hasConstantReflection = true;
-                    logger.createLogEntry(result);
+                if (handler != null) {
+                    Object result = handler.apply(analyzerSuite, new CallContext(frames[i], methodCall, constantCalls));
+                    if (result != null) {
+                        hasConstantReflection = true;
+                        logger.createLogEntry(result);
+                    }
                 }
                 logger.moveToNextInvocation();
             }
@@ -174,7 +177,8 @@ public class StrictConstantReflectionFeature implements InternalFeature {
     }
 }
 
-record AnalyzerSuite(ConstantStringAnalyzer stringAnalyzer, ConstantClassAnalyzer classAnalyzer, ConstantArrayAnalyzer<Class<?>> classArrayAnalyzer) {
+record AnalyzerSuite(ConstantStringAnalyzer stringAnalyzer, ConstantBooleanAnalyzer booleanAnalyzer,
+                     ConstantClassAnalyzer classAnalyzer, ConstantArrayAnalyzer<Class<?>> classArrayAnalyzer) {
 
 }
 
