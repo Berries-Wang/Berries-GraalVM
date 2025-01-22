@@ -11,6 +11,8 @@ import com.oracle.svm.hosted.ImageClassLoader;
 import com.oracle.svm.hosted.strictreflection.analyzers.ConstantArrayAnalyzer;
 import com.oracle.svm.hosted.strictreflection.analyzers.ConstantBooleanAnalyzer;
 import com.oracle.svm.hosted.strictreflection.analyzers.ConstantClassAnalyzer;
+import com.oracle.svm.hosted.strictreflection.analyzers.ConstantMethodHandlesLookupAnalyzer;
+import com.oracle.svm.hosted.strictreflection.analyzers.ConstantMethodTypeAnalyzer;
 import com.oracle.svm.hosted.strictreflection.analyzers.ConstantStringAnalyzer;
 import com.oracle.svm.util.ClassUtil;
 import jdk.graal.compiler.options.Option;
@@ -138,7 +140,9 @@ public class StrictConstantReflectionFeature implements InternalFeature {
                 new ConstantStringAnalyzer(instructions, frames),
                 new ConstantBooleanAnalyzer(instructions, frames),
                 new ConstantClassAnalyzer(instructions, frames),
-                new ConstantArrayAnalyzer<>(instructions, frames, new ConstantClassAnalyzer(instructions, frames))
+                new ConstantArrayAnalyzer<>(instructions, frames, new ConstantClassAnalyzer(instructions, frames)),
+                new ConstantMethodTypeAnalyzer(instructions, frames),
+                new ConstantMethodHandlesLookupAnalyzer(instructions, frames)
         );
         Map<MethodInsnNode, Object> constantCalls = new HashMap<>();
 
@@ -155,7 +159,7 @@ public class StrictConstantReflectionFeature implements InternalFeature {
             if (instructions[i] instanceof MethodInsnNode methodCall) {
                 BiFunction<AnalyzerSuite, CallContext, Object> handler = ConstantCallHandlers.get(Utils.encodeMethodCall(methodCall));
                 if (handler != null) {
-                    Object result = handler.apply(analyzerSuite, new CallContext(frames[i], methodCall, constantCalls));
+                    Object result = handler.apply(analyzerSuite, new CallContext(method, frames[i], methodCall, constantCalls));
                     if (result != null) {
                         hasConstantReflection = true;
                         logger.createLogEntry(result);
@@ -178,10 +182,11 @@ public class StrictConstantReflectionFeature implements InternalFeature {
 }
 
 record AnalyzerSuite(ConstantStringAnalyzer stringAnalyzer, ConstantBooleanAnalyzer booleanAnalyzer,
-                     ConstantClassAnalyzer classAnalyzer, ConstantArrayAnalyzer<Class<?>> classArrayAnalyzer) {
+                     ConstantClassAnalyzer classAnalyzer, ConstantArrayAnalyzer<Class<?>> classArrayAnalyzer,
+                     ConstantMethodTypeAnalyzer methodTypeAnalyzer, ConstantMethodHandlesLookupAnalyzer methodHandlesLookupAnalyzer) {
 
 }
 
-record CallContext(Frame<SourceValue> frame, MethodInsnNode callSite, Map<MethodInsnNode, Object> constantCalls) {
+record CallContext(AnalysisMethod caller, Frame<SourceValue> frame, MethodInsnNode callSite, Map<MethodInsnNode, Object> constantCalls) {
 
 }

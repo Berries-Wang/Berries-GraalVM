@@ -564,13 +564,13 @@ public final class ReflectionPlugins {
             @Override
             public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver) {
                 VMError.guarantee(!targetMethod.isStatic(), "Bulk reflection queries are not static");
-                return registerConstantBulkReflectionQuery(b, receiver, registrationCallback);
+                return registerConstantBulkReflectionQuery(b, targetMethod, receiver, registrationCallback);
             }
         });
     }
 
     @SuppressWarnings("unchecked")
-    private <T> boolean registerConstantBulkReflectionQuery(GraphBuilderContext b, Receiver receiver, Consumer<T> registrationCallback) {
+    private <T> boolean registerConstantBulkReflectionQuery(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, Consumer<T> registrationCallback) {
         /*
          * Calling receiver.get(true) can add a null check guard, i.e., modifying the graph in the
          * process. It is an error for invocation plugins that do not replace the call to modify the
@@ -582,6 +582,7 @@ public final class ReflectionPlugins {
         }
 
         b.add(ReachabilityRegistrationNode.create(() -> registerForRuntimeReflection((T) receiverValue, registrationCallback), reason));
+        traceConstant(b, targetMethod, receiverValue, new Object[]{}, new Object[]{});
         return true;
     }
 

@@ -2,9 +2,12 @@ package com.oracle.svm.hosted.strictreflection;
 
 import com.oracle.svm.hosted.strictreflection.analyzers.ConstantArrayAnalyzer;
 import com.oracle.svm.hosted.strictreflection.analyzers.ConstantValueAnalyzer;
+import com.oracle.svm.util.ReflectionUtil;
 import jdk.internal.org.objectweb.asm.tree.analysis.SourceValue;
 import org.graalvm.nativeimage.hosted.RuntimeReflection;
 
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -21,6 +24,8 @@ class ConstantCallHandlers {
     public static BiFunction<AnalyzerSuite, CallContext, Object> get(String encodedMethod) {
         return reflectiveCallHandlers.get(encodedMethod);
     }
+
+    private static final Constructor<MethodHandles.Lookup> lookupConstructor = ReflectionUtil.lookupConstructor(MethodHandles.Lookup.class, Class.class);
 
     private static final Map<String, BiFunction<AnalyzerSuite, CallContext, Object>> reflectiveCallHandlers = new HashMap<>() {
         {
@@ -44,6 +49,28 @@ class ConstantCallHandlers {
             put(Utils.encodeMethodCall("java/lang/Class", "getPermittedSubclasses", "()[Ljava/lang/Class;"), ConstantCallHandlers::allPermittedSubclassesHandler);
             put(Utils.encodeMethodCall("java/lang/Class", "getRecordComponents", "()[Ljava/lang/reflect/RecordComponent;"), ConstantCallHandlers::allRecordComponentsHandler);
             put(Utils.encodeMethodCall("java/lang/Class", "getSigners", "()[Ljava/lang/Object;"), ConstantCallHandlers::allSignersHandler);
+
+            put(Utils.encodeMethodCall("java/lang/ClassLoader", "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;"), ConstantCallHandlers::classAccessHandlerFromClassLoader);
+
+            put(Utils.encodeMethodCall("java/lang/invoke/MethodType", "methodType", "(Ljava/lang/Class;)Ljava/lang/invoke/MethodType;"), ConstantCallHandlers::methodTypeOneHandler);
+            put(Utils.encodeMethodCall("java/lang/invoke/MethodType", "methodType", "(Ljava/lang/Class;Ljava/lang/Class;)Ljava/lang/invoke/MethodType;"), ConstantCallHandlers::methodTypeTwoHandler);
+            put(Utils.encodeMethodCall("java/lang/invoke/MethodType", "methodType", "(Ljava/lang/Class;[Ljava/lang/Class;)Ljava/lang/invoke/MethodType;"), ConstantCallHandlers::methodTypeThreeHandler);
+            put(Utils.encodeMethodCall("java/lang/invoke/MethodType", "methodType", "(Ljava/lang/Class;Ljava/lang/Class;[Ljava/lang/Class;)Ljava/lang/invoke/MethodType;"), ConstantCallHandlers::methodTypeFourHandler);
+            put(Utils.encodeMethodCall("java/lang/invoke/MethodType", "methodType", "(Ljava/lang/Class;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/MethodType;"), ConstantCallHandlers::methodTypeFiveHandler);
+
+            put(Utils.encodeMethodCall("java/lang/invoke/MethodHandles", "lookup", "()Ljava/lang/invoke/MethodHandles$Lookup;"), ConstantCallHandlers::lookupHandler);
+            put(Utils.encodeMethodCall("java/lang/invoke/MethodHandles", "privateLookupIn", "(Ljava/lang/Class;Ljava/lang/invoke/MethodHandles$Lookup;)Ljava/lang/invoke/MethodHandles$Lookup;"), ConstantCallHandlers::privateLookupInHandler);
+
+            put(Utils.encodeMethodCall("java/lang/invoke/MethodHandles$Lookup", "findClass", "(Ljava/lang/String;)Ljava/lang/Class;"), ConstantCallHandlers::findClassHandler);
+            put(Utils.encodeMethodCall("java/lang/invoke/MethodHandles$Lookup", "findConstructor", "(Ljava/lang/Class;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/MethodHandle;"), ConstantCallHandlers::findConstructorHandler);
+            put(Utils.encodeMethodCall("java/lang/invoke/MethodHandles$Lookup", "findStatic", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/MethodHandle;"), ConstantCallHandlers::findStaticHandler);
+            put(Utils.encodeMethodCall("java/lang/invoke/MethodHandles$Lookup", "findStaticGetter", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/invoke/MethodHandle;"), ConstantCallHandlers::findStaticGetterHandler);
+            put(Utils.encodeMethodCall("java/lang/invoke/MethodHandles$Lookup", "findStaticSetter", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/invoke/MethodHandle;"), ConstantCallHandlers::findStaticSetterHandler);
+            put(Utils.encodeMethodCall("java/lang/invoke/MethodHandles$Lookup", "findStaticVarHandle", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/invoke/VarHandle;"), ConstantCallHandlers::findStaticVarHandleHandler);
+            put(Utils.encodeMethodCall("java/lang/invoke/MethodHandles$Lookup", "findVirtual", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/MethodHandle;"), ConstantCallHandlers::findVirtualHandler);
+            put(Utils.encodeMethodCall("java/lang/invoke/MethodHandles$Lookup", "findGetter", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/invoke/MethodHandle;"), ConstantCallHandlers::findGetterHandler);
+            put(Utils.encodeMethodCall("java/lang/invoke/MethodHandles$Lookup", "findSetter", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/invoke/MethodHandle;"), ConstantCallHandlers::findSetterHandler);
+            put(Utils.encodeMethodCall("java/lang/invoke/MethodHandles$Lookup", "findVarHandle", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/invoke/VarHandle;"), ConstantCallHandlers::findVarHandleHandler);
         }
     };
 
@@ -224,6 +251,295 @@ class ConstantCallHandlers {
 
     private static Object allSignersHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
         return bulkAccessHandler(analyzerSuite, callContext, RuntimeReflection::registerAllSigners, Class::getSigners);
+    }
+
+    private static Object classAccessHandlerFromClassLoader(AnalyzerSuite analyzerSuite, CallContext callContext) {
+        Optional<String> className = inferConstant(analyzerSuite.stringAnalyzer(), callContext, 1);
+
+        if (className.isEmpty()) {
+            return null;
+        }
+
+        RuntimeReflection.registerClassLookup(className.get());
+        try {
+            Class<?> clazz = Class.forName(className.get(), false, ClassLoader.getSystemClassLoader());
+            callContext.constantCalls().put(callContext.callSite(), clazz);
+            return clazz;
+        } catch (ClassNotFoundException e) {
+            // The call will throw an exception during runtime - ignore for the rest of the analysis.
+            return e;
+        }
+    }
+
+    private static Object methodTypeOneHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+        Optional<Class<?>> rtype = inferConstant(analyzerSuite.classAnalyzer(), callContext, 0);
+
+        if (rtype.isEmpty()) {
+            return null;
+        }
+
+        MethodType methodType = MethodType.methodType(rtype.get());
+        callContext.constantCalls().put(callContext.callSite(), methodType);
+        return methodType;
+    }
+
+    private static Object methodTypeTwoHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+        Optional<Class<?>> rtype = inferConstant(analyzerSuite.classAnalyzer(), callContext, 0);
+        Optional<Class<?>> ptype0 = inferConstant(analyzerSuite.classAnalyzer(), callContext, 1);
+
+        if (rtype.isEmpty() || ptype0.isEmpty()) {
+            return null;
+        }
+
+        MethodType methodType = MethodType.methodType(rtype.get(), ptype0.get());
+        callContext.constantCalls().put(callContext.callSite(), methodType);
+        return methodType;
+    }
+
+    private static Object methodTypeThreeHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+        Optional<Class<?>> rtype = inferConstant(analyzerSuite.classAnalyzer(), callContext, 0);
+        Optional<ArrayList<Class<?>>> ptypes = inferConstant(analyzerSuite.classArrayAnalyzer(), callContext, 1);
+
+        if (rtype.isEmpty() || ptypes.isEmpty()) {
+            return null;
+        }
+
+        MethodType methodType = MethodType.methodType(rtype.get(), ptypes.get().toArray(Class[]::new));
+        callContext.constantCalls().put(callContext.callSite(), methodType);
+        return methodType;
+    }
+
+    private static Object methodTypeFourHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+        Optional<Class<?>> rtype = inferConstant(analyzerSuite.classAnalyzer(), callContext, 0);
+        Optional<Class<?>> ptype0 = inferConstant(analyzerSuite.classAnalyzer(), callContext, 1);
+        Optional<ArrayList<Class<?>>> ptypes = inferConstant(analyzerSuite.classArrayAnalyzer(), callContext, 2);
+
+        if (rtype.isEmpty() || ptype0.isEmpty() || ptypes.isEmpty()) {
+            return null;
+        }
+
+        MethodType methodType = MethodType.methodType(rtype.get(), ptype0.get(), ptypes.get().toArray(Class[]::new));
+        callContext.constantCalls().put(callContext.callSite(), methodType);
+        return methodType;
+    }
+
+    private static Object methodTypeFiveHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+        Optional<Class<?>> rtype = inferConstant(analyzerSuite.classAnalyzer(), callContext, 0);
+        Optional<MethodType> ptypes = inferConstant(analyzerSuite.methodTypeAnalyzer(), callContext, 1);
+
+        if (rtype.isEmpty() || ptypes.isEmpty()) {
+            return null;
+        }
+
+        MethodType methodType = MethodType.methodType(rtype.get(), ptypes.get());
+        callContext.constantCalls().put(callContext.callSite(), methodType);
+        return methodType;
+    }
+
+    private static Object lookupHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+        Class<?> callerClass = callContext.caller().getDeclaringClass().getJavaClass();
+        try {
+            MethodHandles.Lookup lookup = lookupConstructor.newInstance(callerClass);
+            callContext.constantCalls().put(callContext.callSite(), lookup);
+            return lookup;
+        } catch (Exception e) {
+            return e;
+        }
+    }
+
+    private static Object privateLookupInHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+        Optional<Class<?>> targetClass = inferConstant(analyzerSuite.classAnalyzer(), callContext, 0);
+        Optional<MethodHandles.Lookup> lookup = inferConstant(analyzerSuite.methodHandlesLookupAnalyzer(), callContext, 1);
+
+        if (targetClass.isEmpty() || lookup.isEmpty()) {
+            return null;
+        }
+
+        try {
+            MethodHandles.Lookup lookupTarget = MethodHandles.privateLookupIn(targetClass.get(), lookup.get());
+            callContext.constantCalls().put(callContext.callSite(), lookupTarget);
+            return lookupTarget;
+        } catch (IllegalAccessException e) {
+            return e;
+        }
+    }
+
+    private static Object findClassHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+        Optional<MethodHandles.Lookup> lookup = inferConstant(analyzerSuite.methodHandlesLookupAnalyzer(), callContext, 0);
+        Optional<String> className = inferConstant(analyzerSuite.stringAnalyzer(), callContext, 1);
+
+        if (lookup.isEmpty() || className.isEmpty()) {
+            return null;
+        }
+
+        RuntimeReflection.registerClassLookup(className.get());
+        try {
+            return lookup.get().findClass(className.get());
+        } catch (Exception e) {
+            return e;
+        }
+    }
+
+    private static Object findConstructorHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+        Optional<MethodHandles.Lookup> lookup = inferConstant(analyzerSuite.methodHandlesLookupAnalyzer(), callContext, 0);
+        Optional<Class<?>> clazz = inferConstant(analyzerSuite.classAnalyzer(), callContext, 1);
+        Optional<MethodType> methodType = inferConstant(analyzerSuite.methodTypeAnalyzer(), callContext, 2);
+
+        if (lookup.isEmpty() || clazz.isEmpty() || methodType.isEmpty()) {
+            return null;
+        }
+
+        RuntimeReflection.registerConstructorLookup(clazz.get(), methodType.get().parameterArray());
+        try {
+            return lookup.get().findConstructor(clazz.get(), methodType.get());
+        } catch (Exception e) {
+            return e;
+        }
+
+    }
+
+    private static Object findStaticHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+        Optional<MethodHandles.Lookup> lookup = inferConstant(analyzerSuite.methodHandlesLookupAnalyzer(), callContext, 0);
+        Optional<Class<?>> clazz = inferConstant(analyzerSuite.classAnalyzer(), callContext, 1);
+        Optional<String> methodName = inferConstant(analyzerSuite.stringAnalyzer(), callContext, 2);
+        Optional<MethodType> methodType = inferConstant(analyzerSuite.methodTypeAnalyzer(), callContext, 3);
+
+        if (lookup.isEmpty() || clazz.isEmpty() || methodName.isEmpty() || methodType.isEmpty()) {
+            return null;
+        }
+
+        RuntimeReflection.registerMethodLookup(clazz.get(), methodName.get(), methodType.get().parameterArray());
+        try {
+            return lookup.get().findStatic(clazz.get(), methodName.get(), methodType.get());
+        } catch (Exception e) {
+            return e;
+        }
+    }
+
+    private static Object findStaticGetterHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+        Optional<MethodHandles.Lookup> lookup = inferConstant(analyzerSuite.methodHandlesLookupAnalyzer(), callContext, 0);
+        Optional<Class<?>> clazz = inferConstant(analyzerSuite.classAnalyzer(), callContext, 1);
+        Optional<String> fieldName = inferConstant(analyzerSuite.stringAnalyzer(), callContext, 2);
+        Optional<Class<?>> type = inferConstant(analyzerSuite.classAnalyzer(), callContext, 3);
+
+        if (lookup.isEmpty() || clazz.isEmpty() || fieldName.isEmpty() || type.isEmpty()) {
+            return null;
+        }
+
+        RuntimeReflection.registerFieldLookup(clazz.get(), fieldName.get());
+        try {
+            return lookup.get().findStaticGetter(clazz.get(), fieldName.get(), type.get());
+        } catch (Exception e) {
+            return e;
+        }
+    }
+
+    private static Object findStaticSetterHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+        Optional<MethodHandles.Lookup> lookup = inferConstant(analyzerSuite.methodHandlesLookupAnalyzer(), callContext, 0);
+        Optional<Class<?>> clazz = inferConstant(analyzerSuite.classAnalyzer(), callContext, 1);
+        Optional<String> fieldName = inferConstant(analyzerSuite.stringAnalyzer(), callContext, 2);
+        Optional<Class<?>> type = inferConstant(analyzerSuite.classAnalyzer(), callContext, 3);
+
+        if (lookup.isEmpty() || clazz.isEmpty() || fieldName.isEmpty() || type.isEmpty()) {
+            return null;
+        }
+
+        RuntimeReflection.registerFieldLookup(clazz.get(), fieldName.get());
+        try {
+            return lookup.get().findStaticSetter(clazz.get(), fieldName.get(), type.get());
+        } catch (Exception e) {
+            return e;
+        }
+    }
+
+    private static Object findStaticVarHandleHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+        Optional<MethodHandles.Lookup> lookup = inferConstant(analyzerSuite.methodHandlesLookupAnalyzer(), callContext, 0);
+        Optional<Class<?>> clazz = inferConstant(analyzerSuite.classAnalyzer(), callContext, 1);
+        Optional<String> fieldName = inferConstant(analyzerSuite.stringAnalyzer(), callContext, 2);
+        Optional<Class<?>> type = inferConstant(analyzerSuite.classAnalyzer(), callContext, 3);
+
+        if (lookup.isEmpty() || clazz.isEmpty() || fieldName.isEmpty() || type.isEmpty()) {
+            return null;
+        }
+
+        RuntimeReflection.registerFieldLookup(clazz.get(), fieldName.get());
+        try {
+            return lookup.get().findStaticVarHandle(clazz.get(), fieldName.get(), type.get());
+        } catch (Exception e) {
+            return e;
+        }
+    }
+
+    private static Object findVirtualHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+        Optional<MethodHandles.Lookup> lookup = inferConstant(analyzerSuite.methodHandlesLookupAnalyzer(), callContext, 0);
+        Optional<Class<?>> clazz = inferConstant(analyzerSuite.classAnalyzer(), callContext, 1);
+        Optional<String> methodName = inferConstant(analyzerSuite.stringAnalyzer(), callContext, 2);
+        Optional<MethodType> methodType = inferConstant(analyzerSuite.methodTypeAnalyzer(), callContext, 3);
+
+        if (lookup.isEmpty() || clazz.isEmpty() || methodName.isEmpty() || methodType.isEmpty()) {
+            return null;
+        }
+
+        RuntimeReflection.registerMethodLookup(clazz.get(), methodName.get(), methodType.get().parameterArray());
+        try {
+            return lookup.get().findVirtual(clazz.get(), methodName.get(), methodType.get());
+        } catch (Exception e) {
+            return e;
+        }
+    }
+
+    private static Object findGetterHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+        Optional<MethodHandles.Lookup> lookup = inferConstant(analyzerSuite.methodHandlesLookupAnalyzer(), callContext, 0);
+        Optional<Class<?>> clazz = inferConstant(analyzerSuite.classAnalyzer(), callContext, 1);
+        Optional<String> fieldName = inferConstant(analyzerSuite.stringAnalyzer(), callContext, 2);
+        Optional<Class<?>> type = inferConstant(analyzerSuite.classAnalyzer(), callContext, 3);
+
+        if (lookup.isEmpty() || clazz.isEmpty() || fieldName.isEmpty() || type.isEmpty()) {
+            return null;
+        }
+
+        RuntimeReflection.registerFieldLookup(clazz.get(), fieldName.get());
+        try {
+            return lookup.get().findGetter(clazz.get(), fieldName.get(), type.get());
+        } catch (Exception e) {
+            return e;
+        }
+    }
+
+    private static Object findSetterHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+        Optional<MethodHandles.Lookup> lookup = inferConstant(analyzerSuite.methodHandlesLookupAnalyzer(), callContext, 0);
+        Optional<Class<?>> clazz = inferConstant(analyzerSuite.classAnalyzer(), callContext, 1);
+        Optional<String> fieldName = inferConstant(analyzerSuite.stringAnalyzer(), callContext, 2);
+        Optional<Class<?>> type = inferConstant(analyzerSuite.classAnalyzer(), callContext, 3);
+
+        if (lookup.isEmpty() || clazz.isEmpty() || fieldName.isEmpty() || type.isEmpty()) {
+            return null;
+        }
+
+        RuntimeReflection.registerFieldLookup(clazz.get(), fieldName.get());
+        try {
+            return lookup.get().findSetter(clazz.get(), fieldName.get(), type.get());
+        } catch (Exception e) {
+            return e;
+        }
+    }
+
+    private static Object findVarHandleHandler(AnalyzerSuite analyzerSuite, CallContext callContext) {
+        Optional<MethodHandles.Lookup> lookup = inferConstant(analyzerSuite.methodHandlesLookupAnalyzer(), callContext, 0);
+        Optional<Class<?>> clazz = inferConstant(analyzerSuite.classAnalyzer(), callContext, 1);
+        Optional<String> fieldName = inferConstant(analyzerSuite.stringAnalyzer(), callContext, 2);
+        Optional<Class<?>> type = inferConstant(analyzerSuite.classAnalyzer(), callContext, 3);
+
+        if (lookup.isEmpty() || clazz.isEmpty() || fieldName.isEmpty() || type.isEmpty()) {
+            return null;
+        }
+
+        RuntimeReflection.registerFieldLookup(clazz.get(), fieldName.get());
+        try {
+            return lookup.get().findVarHandle(clazz.get(), fieldName.get(), type.get());
+        } catch (Exception e) {
+            return e;
+        }
     }
 
     private static <T> Optional<T> inferConstant(ConstantValueAnalyzer<T> analyzer, CallContext callContext, int argumentIndex) {

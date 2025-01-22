@@ -59,6 +59,7 @@ public class ConstantClassAnalyzer extends ConstantValueAnalyzer<Class<?>> {
             case "java/lang/Long" -> long.class;
             case "java/lang/Float" -> float.class;
             case "java/lang/Double" -> double.class;
+            case "java/lang/Void" -> void.class;
             default -> null;
         };
 
