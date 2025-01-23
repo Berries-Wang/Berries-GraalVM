@@ -13,6 +13,9 @@ import com.oracle.svm.jvmtiagentbase.jvmti.JvmtiEnv;
 import com.oracle.svm.jvmtiagentbase.jvmti.JvmtiEventCallbacks;
 import com.oracle.svm.jvmtiagentbase.jvmti.JvmtiEventMode;
 import com.oracle.svm.jvmtiagentbase.jvmti.JvmtiInterface;
+import jdk.internal.org.objectweb.asm.ClassReader;
+import jdk.internal.org.objectweb.asm.ClassWriter;
+import jdk.internal.org.objectweb.asm.tree.ClassNode;
 import org.graalvm.nativeimage.c.function.CEntryPoint;
 import org.graalvm.nativeimage.c.function.CEntryPointLiteral;
 import org.graalvm.nativeimage.c.function.CFunctionPointer;
@@ -69,22 +72,48 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
     private static void onClassFileLoadHook(JvmtiEnv jvmti, JNIEnvironment jni, JNIObjectHandle classBeingRedefined,
                                             JNIObjectHandle loader, CCharPointer name, JNIObjectHandle protectionDomain, int classDataLen, CCharPointer classData,
                                             CIntPointer newClassDataLen, CCharPointerPointer newClassData) {
-        if (loader.equal(nullHandle())) {
-            return;
-        }
-        for (JNIObjectHandle builtinLoader : builtinClassLoaders) {
-            if (jniFunctions().getIsSameObject().invoke(jni, loader, builtinLoader)) {
-                return;
-            }
-        }
-        NativeImageReflectionAgent agent = singleton();
-        JNIObjectHandle jdkInternalReflectDelegatingClassLoader = agent.handles().jdkInternalReflectDelegatingClassLoader;
-        if (!jdkInternalReflectDelegatingClassLoader.equal(nullHandle()) && jniFunctions().getIsInstanceOf().invoke(jni, loader, jdkInternalReflectDelegatingClassLoader)) {
+        if (shouldIgnoreClassLoader(jni, loader)) {
             return;
         }
 
         String javaName = CTypeConversion.toJavaString(name);
         System.out.println("Loaded class " + javaName);
+
+        byte[] clazzData = new byte[classDataLen];
+        CTypeConversion.asByteBuffer(classData, classDataLen).get(clazzData);
+
+        byte[] newClazzData = instrumentClass(clazzData);
+        int newClazzDataLen = newClazzData.length;
+
+        Support.check(jvmti.getFunctions().Allocate().invoke(jvmti, newClazzDataLen, newClassData));
+        CTypeConversion.asByteBuffer(newClassData.read(), newClazzDataLen).put(newClazzData);
+        newClassDataLen.write(newClazzDataLen);
+    }
+
+    private static boolean shouldIgnoreClassLoader(JNIEnvironment jni, JNIObjectHandle loader) {
+        if (loader.equal(nullHandle())) {
+            return true;
+        }
+        for (JNIObjectHandle builtinLoader : builtinClassLoaders) {
+            if (jniFunctions().getIsSameObject().invoke(jni, loader, builtinLoader)) {
+                return true;
+            }
+        }
+        NativeImageReflectionAgent agent = singleton();
+        JNIObjectHandle jdkInternalReflectDelegatingClassLoader = agent.handles().jdkInternalReflectDelegatingClassLoader;
+        if (!jdkInternalReflectDelegatingClassLoader.equal(nullHandle()) && jniFunctions().getIsInstanceOf().invoke(jni, loader, jdkInternalReflectDelegatingClassLoader)) {
+            return true;
+        }
+        return false;
+    }
+
+    private static byte[] instrumentClass(byte[] classData) {
+        ClassReader reader = new ClassReader(classData);
+        ClassNode classNode = new ClassNode();
+        reader.accept(classNode, 0);
+        ClassWriter writer = new ClassWriter(0);
+        classNode.accept(writer);
+        return writer.toByteArray();
     }
 
     @Override
