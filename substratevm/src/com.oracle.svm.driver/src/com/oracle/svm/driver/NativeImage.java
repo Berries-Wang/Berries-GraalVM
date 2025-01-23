@@ -285,6 +285,7 @@ public class NativeImage {
 
     final String oHInspectServerContentPath = oH(PointstoOptions.InspectServerContentPath);
     final String oHDeadlockWatchdogInterval = oH(SubstrateOptions.DeadlockWatchdogInterval);
+    final String oHEnableStrictReflection = oHEnabled(SubstrateOptions.EnableStrictReflection);
 
     final Map<String, String> imageBuilderEnvironment = new HashMap<>();
     private final ArrayList<String> imageBuilderArgs = new ArrayList<>();
@@ -1240,6 +1241,10 @@ public class NativeImage {
         /* Perform option consolidation of imageBuilderArgs */
 
         imageBuilderJavaArgs.addAll(getAgentArguments());
+
+        if (imageBuilderArgs.stream().anyMatch(arg -> arg.contains(oHEnableStrictReflection))) {
+            imageBuilderJavaArgs.add("-agentlib:native-image-reflection-agent");
+        }
 
         Optional<ArgumentEntry> lastMainClass = getHostedOptionArgument(imageBuilderArgs, oHClass);
         mainClass = lastMainClass.map(ArgumentEntry::value).orElse(null);

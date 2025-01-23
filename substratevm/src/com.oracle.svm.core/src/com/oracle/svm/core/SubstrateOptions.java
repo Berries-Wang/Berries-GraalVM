@@ -1359,4 +1359,7 @@ public class SubstrateOptions {
             throw UserError.invalidOptionValue(key, key.getValue(), "Mapping the image heap with mremap() is only supported on Linux.");
         }
     });
+
+    @Option(help = "Enable the deterministic, bytecode level analysis for constant reflection usage.")
+    public static final HostedOptionKey<Boolean> EnableStrictReflection = new HostedOptionKey<>(false);
 }
