@@ -3,7 +3,6 @@ package com.oracle.svm.reflectionagent;
 import com.oracle.svm.core.c.function.CEntryPointOptions;
 import com.oracle.svm.core.jni.headers.JNIEnvironment;
 import com.oracle.svm.core.jni.headers.JNIJavaVM;
-import com.oracle.svm.core.jni.headers.JNIMethodId;
 import com.oracle.svm.core.jni.headers.JNIObjectHandle;
 import com.oracle.svm.jvmtiagentbase.AgentIsolate;
 import com.oracle.svm.jvmtiagentbase.JNIHandleSet;
@@ -36,8 +35,6 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
             JvmtiEnv.class, JNIEnvironment.class, JNIObjectHandle.class, JNIObjectHandle.class, CCharPointer.class, JNIObjectHandle.class, int.class, CCharPointer.class, CIntPointer.class,
             CCharPointerPointer.class);
 
-    private static JNIObjectHandle[] builtinClassLoaders;
-
     @Override
     protected JNIHandleSet constructJavaHandles(JNIEnvironment env) {
         return new NativeImageReflectionAgentJNIHandleSet(env);
@@ -51,18 +48,6 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
 
     @Override
     protected void onVMInitCallback(JvmtiEnv jvmti, JNIEnvironment jni, JNIObjectHandle thread) {
-        setupClassFileLoadEvent(jvmti, jni);
-    }
-
-    private static void setupClassFileLoadEvent(JvmtiEnv jvmti, JNIEnvironment jni) {
-        NativeImageReflectionAgent agent = singleton();
-        JNIObjectHandle classLoader = agent.handles().classLoader;
-        String[] classLoaderGetters = new String[] {"getSystemClassLoader", "getPlatformClassLoader", "getBuiltinAppClassLoader"};
-        builtinClassLoaders = new JNIObjectHandle[classLoaderGetters.length];
-        for (int i = 0; i < classLoaderGetters.length; i++) {
-            JNIMethodId getterHandle = agent.handles().getMethodId(jni, classLoader, classLoaderGetters[i], "()Ljava/lang/ClassLoader;", true);
-            builtinClassLoaders[i] = agent.handles().newTrackedGlobalRef(jni, Support.callObjectMethod(jni, classLoader, getterHandle));
-        }
         check(jvmti.getFunctions().SetEventNotificationMode().invoke(jvmti, JvmtiEventMode.JVMTI_ENABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, nullHandle()));
     }
 
@@ -94,12 +79,20 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
         if (loader.equal(nullHandle())) {
             return true;
         }
-        for (JNIObjectHandle builtinLoader : builtinClassLoaders) {
-            if (jniFunctions().getIsSameObject().invoke(jni, loader, builtinLoader)) {
-                return true;
-            }
-        }
+
         NativeImageReflectionAgent agent = singleton();
+        if (jniFunctions().getIsSameObject().invoke(jni, loader, agent.handles().systemClassLoader)) {
+            return true;
+        }
+        JNIObjectHandle platformClassLoader = agent.handles().platformClassLoader;
+        if (!platformClassLoader.equal(nullHandle()) && jniFunctions().getIsSameObject().invoke(jni, loader, platformClassLoader)) {
+            return true;
+        }
+        JNIObjectHandle builtinAppClassLoader = agent.handles().builtinAppClassLoader;
+        if (!builtinAppClassLoader.equal(nullHandle()) && jniFunctions().getIsSameObject().invoke(jni, loader, builtinAppClassLoader)) {
+            return true;
+        }
+
         JNIObjectHandle jdkInternalReflectDelegatingClassLoader = agent.handles().jdkInternalReflectDelegatingClassLoader;
         if (!jdkInternalReflectDelegatingClassLoader.equal(nullHandle()) && jniFunctions().getIsInstanceOf().invoke(jni, loader, jdkInternalReflectDelegatingClassLoader)) {
             return true;
