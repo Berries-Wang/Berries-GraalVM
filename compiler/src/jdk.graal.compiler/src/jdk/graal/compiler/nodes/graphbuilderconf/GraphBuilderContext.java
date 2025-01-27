@@ -282,8 +282,8 @@ public interface GraphBuilderContext extends GraphBuilderTool {
     }
 
     /**
-     * Gets the inlined call stack for this context. A list with only one element implies that
-     * no inlining has taken place.
+     * Gets the inlined call stack for this context. A list with only one element implies that no
+     * inlining has taken place.
      */
     default List<StackTraceElement> getCallStack() {
         List<StackTraceElement> callStack = new ArrayList<>();

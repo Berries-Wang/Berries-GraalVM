@@ -7,9 +7,9 @@ package com.oracle.svm.core.annotate;
  * reflection method. Since these calls will be folded into constants, they will never be executed during
  * image run-time.
  */
-final public class ConstantTags {
+public final class ConstantTags {
 
-    private final static StackWalker stackWalker = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
+    private static final StackWalker stackWalker = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
 
     public static Class<?> forName(String className) throws ClassNotFoundException {
         return Class.forName(className, true, stackWalker.getCallerClass().getClassLoader());
