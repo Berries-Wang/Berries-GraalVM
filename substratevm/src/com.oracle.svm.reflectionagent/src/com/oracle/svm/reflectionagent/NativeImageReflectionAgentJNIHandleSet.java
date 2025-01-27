@@ -17,6 +17,7 @@ public class NativeImageReflectionAgentJNIHandleSet extends JNIHandleSet {
     final JNIObjectHandle platformClassLoader;
     final JNIObjectHandle builtinAppClassLoader;
 
+    @SuppressWarnings("this-escape")
     public NativeImageReflectionAgentJNIHandleSet(JNIEnvironment env) {
         super(env);
         classLoader = newClassGlobalRef(env, "java/lang/ClassLoader");
