@@ -928,6 +928,7 @@ final class ReflectionPluginsTracingFeature implements InternalFeature {
             this.targetArguments = targetArguments;
         }
 
+        @Override
         public String toString() {
             String targetArgumentsString = Stream.of(targetArguments)
                     .map(arg -> arg instanceof Object[] ? Arrays.toString((Object[]) arg) : Objects.toString(arg)).collect(Collectors.joining(", "));
