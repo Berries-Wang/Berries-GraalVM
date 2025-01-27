@@ -799,10 +799,12 @@ public final class ReflectionPlugins {
     private void traceConstant(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Object value, boolean shouldReportAgainstStrictMode) {
         if (reason.duringAnalysis() && reason != ParsingReason.JITCompilation) {
             if (ReflectionPluginsTracingFeature.isEnabled() && !(ReflectionPluginsTracingFeature.Options.ReflectionPluginTraceUserOnly.getValue() && !isUserProvided(b))) {
-                b.add(ReachabilityRegistrationNode.create(() -> ReflectionPluginsTracingFeature.traceConstant(b.getCallStack(), targetMethod, targetCaller, targetArguments, value), reason));
+                List<StackTraceElement> callStack = b.getCallStack();
+                b.add(ReachabilityRegistrationNode.create(() -> ReflectionPluginsTracingFeature.traceConstant(callStack, targetMethod, targetCaller, targetArguments, value), reason));
             }
             if (SubstrateOptions.EnableStrictReflection.getValue() && shouldReportAgainstStrictMode && isUserProvided(b)) {
-                b.add(ReachabilityRegistrationNode.create(() -> ReflectionPluginsTracingFeature.warnForStrictReflectionConstant(b.getCallStack(), targetMethod, targetCaller, targetArguments, value), reason));
+                List<StackTraceElement> callStack = b.getCallStack();
+                b.add(ReachabilityRegistrationNode.create(() -> ReflectionPluginsTracingFeature.warnForStrictReflectionConstant(callStack, targetMethod, targetCaller, targetArguments, value), reason));
             }
         }
     }
@@ -810,10 +812,12 @@ public final class ReflectionPlugins {
     private void traceException(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Class<? extends Throwable> exceptionClass, boolean shouldReportAgainstStrictMode) {
         if (reason.duringAnalysis() && reason != ParsingReason.JITCompilation) {
             if (ReflectionPluginsTracingFeature.isEnabled() && !(ReflectionPluginsTracingFeature.Options.ReflectionPluginTraceUserOnly.getValue() && !isUserProvided(b))) {
-                b.add(ReachabilityRegistrationNode.create(() -> ReflectionPluginsTracingFeature.traceException(b.getCallStack(), targetMethod, targetCaller, targetArguments, exceptionClass), reason));
+                List<StackTraceElement> callStack = b.getCallStack();
+                b.add(ReachabilityRegistrationNode.create(() -> ReflectionPluginsTracingFeature.traceException(callStack, targetMethod, targetCaller, targetArguments, exceptionClass), reason));
             }
             if (SubstrateOptions.EnableStrictReflection.getValue() && shouldReportAgainstStrictMode && isUserProvided(b)) {
-                b.add(ReachabilityRegistrationNode.create(() -> ReflectionPluginsTracingFeature.warnForStrictReflectionException(b.getCallStack(), targetMethod, targetCaller, targetArguments, exceptionClass), reason));
+                List<StackTraceElement> callStack = b.getCallStack();
+                b.add(ReachabilityRegistrationNode.create(() -> ReflectionPluginsTracingFeature.warnForStrictReflectionException(callStack, targetMethod, targetCaller, targetArguments, exceptionClass), reason));
             }
         }
     }
