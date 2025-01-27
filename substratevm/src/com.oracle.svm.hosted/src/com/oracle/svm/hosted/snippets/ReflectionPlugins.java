@@ -362,6 +362,12 @@ public final class ReflectionPlugins {
                 return processClassForName(b, targetMethod, false, nameNode, ConstantNode.forBoolean(true));
             }
         });
+        r.register(new RequiredInvocationPlugin("forName", String.class, boolean.class, ClassLoader.class) {
+            @Override
+            public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode nameNode, ValueNode initializeNode, ValueNode classLoaderNode) {
+                return processClassForName(b, targetMethod, false, nameNode, initializeNode);
+            }
+        });
     }
 
     private static final Constructor<MethodHandles.Lookup> LOOKUP_CONSTRUCTOR = ReflectionUtil.lookupConstructor(MethodHandles.Lookup.class, Class.class);
