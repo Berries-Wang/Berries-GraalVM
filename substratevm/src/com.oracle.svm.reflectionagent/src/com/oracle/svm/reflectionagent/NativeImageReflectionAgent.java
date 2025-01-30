@@ -13,12 +13,14 @@ import com.oracle.svm.jvmtiagentbase.jvmti.JvmtiEnv;
 import com.oracle.svm.jvmtiagentbase.jvmti.JvmtiEventCallbacks;
 import com.oracle.svm.jvmtiagentbase.jvmti.JvmtiEventMode;
 import com.oracle.svm.jvmtiagentbase.jvmti.JvmtiInterface;
+import com.oracle.svm.reflectionagent.analyzers.ConstantArrayAnalyzer;
 import com.oracle.svm.reflectionagent.analyzers.ConstantBooleanAnalyzer;
 import com.oracle.svm.reflectionagent.analyzers.ConstantClassAnalyzer;
 import com.oracle.svm.reflectionagent.analyzers.ConstantStringAnalyzer;
+import com.oracle.svm.reflectionagent.cfg.ControlFlowGraphAnalyzer;
+import com.oracle.svm.reflectionagent.cfg.ControlFlowGraphNode;
 import jdk.internal.org.objectweb.asm.ClassReader;
 import jdk.internal.org.objectweb.asm.ClassWriter;
-import jdk.internal.org.objectweb.asm.Type;
 import jdk.internal.org.objectweb.asm.tree.AbstractInsnNode;
 import jdk.internal.org.objectweb.asm.tree.ClassNode;
 import jdk.internal.org.objectweb.asm.tree.MethodInsnNode;
@@ -37,6 +39,7 @@ import org.graalvm.nativeimage.c.type.CIntPointer;
 import org.graalvm.nativeimage.c.type.CTypeConversion;
 import org.graalvm.nativeimage.hosted.Feature;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -47,19 +50,18 @@ import static com.oracle.svm.core.jni.JNIObjectHandles.nullHandle;
 import static com.oracle.svm.jvmtiagentbase.Support.check;
 import static com.oracle.svm.jvmtiagentbase.Support.jniFunctions;
 import static com.oracle.svm.jvmtiagentbase.jvmti.JvmtiEvent.JVMTI_EVENT_CLASS_FILE_LOAD_HOOK;
-import static jdk.internal.org.objectweb.asm.Opcodes.INVOKESTATIC;
 
 @SuppressWarnings("unused")
 public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflectionAgentJNIHandleSet> {
 
     private static final Class<?> CONSTANT_TAGS_CLASS = ConstantTags.class;
 
-    private static final Map<Signature, BiPredicate<AnalyzerSuite, CallContext>> REFLECTIVE_CALL_HANDLERS = createReflectiveCallHandlers();
+    private static final Map<MethodCallUtils.Signature, BiPredicate<AnalyzerSuite, CallContext>> REFLECTIVE_CALL_HANDLERS = createReflectiveCallHandlers();
 
-    private static Map<Signature, BiPredicate<AnalyzerSuite, CallContext>> createReflectiveCallHandlers() {
-        Map<Signature, BiPredicate<AnalyzerSuite, CallContext>> callHandlers = new HashMap<>();
-        callHandlers.put(new Signature("java/lang/Class", "forName", "(Ljava/lang/String;)Ljava/lang/Class;"), NativeImageReflectionAgent::isForName1Constant);
-        callHandlers.put(new Signature("java/lang/Class", "forName", "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;"), NativeImageReflectionAgent::isForName3Constant);
+    private static Map<MethodCallUtils.Signature, BiPredicate<AnalyzerSuite, CallContext>> createReflectiveCallHandlers() {
+        Map<MethodCallUtils.Signature, BiPredicate<AnalyzerSuite, CallContext>> callHandlers = new HashMap<>();
+        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "forName", "(Ljava/lang/String;)Ljava/lang/Class;"), NativeImageReflectionAgent::isForName1Constant);
+        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "forName", "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;"), NativeImageReflectionAgent::isForName3Constant);
         return callHandlers;
     }
 
@@ -137,21 +139,24 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
     }
 
     private static void instrumentMethod(MethodNode methodNode, ClassNode classNode) throws AnalyzerException {
-        Analyzer<SourceValue> analyzer = new Analyzer<>(new SourceInterpreter());
+        Analyzer<SourceValue> analyzer = new ControlFlowGraphAnalyzer<>(new SourceInterpreter());
 
         AbstractInsnNode[] instructions = methodNode.instructions.toArray();
-        Frame<SourceValue>[] frames = analyzer.analyze(classNode.name, methodNode);
+        @SuppressWarnings("unchecked")
+        ControlFlowGraphNode<SourceValue>[] frames = Arrays.stream(analyzer.analyze(classNode.name, methodNode))
+                .map(frame -> (ControlFlowGraphNode<SourceValue>) frame).toArray(ControlFlowGraphNode[]::new);
         Set<MethodInsnNode> constantCalls = new HashSet<>();
 
         AnalyzerSuite analyzerSuite = new AnalyzerSuite(
                 new ConstantStringAnalyzer(instructions, frames, constantCalls),
                 new ConstantBooleanAnalyzer(instructions, frames, constantCalls),
-                new ConstantClassAnalyzer(instructions, frames, constantCalls)
+                new ConstantClassAnalyzer(instructions, frames, constantCalls),
+                new ConstantArrayAnalyzer(instructions, frames, REFLECTIVE_CALL_HANDLERS.keySet(), new ConstantClassAnalyzer(instructions, frames, constantCalls))
         );
 
         for (int i = 0; i < instructions.length; i++) {
             if (instructions[i] instanceof MethodInsnNode methodCall) {
-                BiPredicate<AnalyzerSuite, CallContext> handler = REFLECTIVE_CALL_HANDLERS.get(new Signature(methodCall));
+                BiPredicate<AnalyzerSuite, CallContext> handler = REFLECTIVE_CALL_HANDLERS.get(new MethodCallUtils.Signature(methodCall));
                 if (handler != null && handler.test(analyzerSuite, new CallContext(methodCall, frames[i]))) {
                     constantCalls.add(methodCall);
                 }
@@ -166,12 +171,12 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
     }
 
     private static boolean isForName1Constant(AnalyzerSuite analyzers, CallContext callContext) {
-        return analyzers.stringAnalyzer.isConstant(getCallArg(callContext.call, 0, callContext.frame));
+        return analyzers.stringAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame));
     }
 
     private static boolean isForName3Constant(AnalyzerSuite analyzers, CallContext callContext) {
-        return analyzers.stringAnalyzer.isConstant(getCallArg(callContext.call, 0, callContext.frame))
-                && analyzers.booleanAnalyzer.isConstant(getCallArg(callContext.call, 1, callContext.frame));
+        return analyzers.stringAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame))
+                && analyzers.booleanAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 1, callContext.frame));
     }
 
     record CallContext(MethodInsnNode call, Frame<SourceValue> frame) {
@@ -179,21 +184,8 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
     }
 
     record AnalyzerSuite(ConstantStringAnalyzer stringAnalyzer, ConstantBooleanAnalyzer booleanAnalyzer,
-                         ConstantClassAnalyzer classAnalyzer) {
+                         ConstantClassAnalyzer classAnalyzer, ConstantArrayAnalyzer classArrayAnalyzer) {
 
-    }
-
-    record Signature(String owner, String name, String desc) {
-
-        Signature(MethodInsnNode methodCall) {
-            this(methodCall.owner, methodCall.name, methodCall.desc);
-        }
-    }
-
-    public static SourceValue getCallArg(MethodInsnNode call, int argIdx, Frame<SourceValue> frame) {
-        int numOfArgs = Type.getArgumentTypes(call.desc).length + (call.getOpcode() == INVOKESTATIC ? 0 : 1);
-        int stackPos = frame.getStackSize() - numOfArgs + argIdx;
-        return frame.getStack(stackPos);
     }
 
     @Override
