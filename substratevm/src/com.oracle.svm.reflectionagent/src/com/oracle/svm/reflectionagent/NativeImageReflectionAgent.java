@@ -53,6 +53,15 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
 
     private static final Class<?> CONSTANT_TAGS_CLASS = ConstantTags.class;
 
+    private static final Map<Signature, BiPredicate<AnalyzerSuite, CallContext>> REFLECTIVE_CALL_HANDLERS = createReflectiveCallHandlers();
+
+    private static Map<Signature, BiPredicate<AnalyzerSuite, CallContext>> createReflectiveCallHandlers() {
+        Map<Signature, BiPredicate<AnalyzerSuite, CallContext>> callHandlers = new HashMap<>();
+        callHandlers.put(new Signature("java/lang/Class", "forName", "(Ljava/lang/String;)Ljava/lang/Class;"), NativeImageReflectionAgent::isForName1Constant);
+        callHandlers.put(new Signature("java/lang/Class", "forName", "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;"), NativeImageReflectionAgent::isForName3Constant);
+        return callHandlers;
+    }
+
     private static final CEntryPointLiteral<CFunctionPointer> ON_CLASS_FILE_LOAD_HOOK = CEntryPointLiteral.create(NativeImageReflectionAgent.class, "onClassFileLoadHook",
             JvmtiEnv.class, JNIEnvironment.class, JNIObjectHandle.class, JNIObjectHandle.class, CCharPointer.class, JNIObjectHandle.class, int.class, CCharPointer.class, CIntPointer.class,
             CCharPointerPointer.class);
@@ -139,7 +148,7 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
         List<MethodInsnNode> constantCalls = new ArrayList<>();
         for (int i = 0; i < instructions.length; i++) {
             if (instructions[i] instanceof MethodInsnNode methodCall) {
-                BiPredicate<AnalyzerSuite, CallContext> handler = callHandlers.get(new Signature(methodCall));
+                BiPredicate<AnalyzerSuite, CallContext> handler = REFLECTIVE_CALL_HANDLERS.get(new Signature(methodCall));
                 if (handler != null && handler.test(analyzerSuite, new CallContext(methodCall, frames[i]))) {
                     constantCalls.add(methodCall);
                 }
@@ -152,13 +161,6 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
     private static void tagAsConstant(MethodInsnNode methodCall) {
         methodCall.owner = CONSTANT_TAGS_CLASS.getName().replace('.', '/');
     }
-
-    private static final Map<Signature, BiPredicate<AnalyzerSuite, CallContext>> callHandlers = new HashMap<>() {
-        {
-            put(new Signature("java/lang/Class", "forName", "(Ljava/lang/String;)Ljava/lang/Class;"), NativeImageReflectionAgent::isForName1Constant);
-            put(new Signature("java/lang/Class", "forName", "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;"), NativeImageReflectionAgent::isForName3Constant);
-        }
-    };
 
     private static boolean isForName1Constant(AnalyzerSuite analyzers, CallContext callContext) {
         return analyzers.stringAnalyzer.isConstant(getCallArg(callContext.call, 0, callContext.frame));
