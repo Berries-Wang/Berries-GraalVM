@@ -359,15 +359,25 @@ public final class ReflectionPlugins {
         r.register(new RequiredInvocationPlugin("forName", String.class) {
             @Override
             public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode nameNode) {
-                return processClassForName(b, targetMethod, false, nameNode, ConstantNode.forBoolean(true));
+                ResolvedJavaMethod original = getOriginalFromConstantTag(b.getMetaAccess(), Class.class, "forName", String.class);
+                return processClassForName(b, original, false, nameNode, ConstantNode.forBoolean(true));
             }
         });
         r.register(new RequiredInvocationPlugin("forName", String.class, boolean.class, ClassLoader.class) {
             @Override
             public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode nameNode, ValueNode initializeNode, ValueNode classLoaderNode) {
-                return processClassForName(b, targetMethod, false, nameNode, initializeNode);
+                ResolvedJavaMethod original = getOriginalFromConstantTag(b.getMetaAccess(), Class.class, "forName", String.class, boolean.class, ClassLoader.class);
+                return processClassForName(b, original, false, nameNode, initializeNode);
             }
         });
+    }
+
+    private ResolvedJavaMethod getOriginalFromConstantTag(MetaAccessProvider metaAccess, Class<?> declaringClass, String name, Class<?>... parameterTypes) {
+        try {
+            return metaAccess.lookupJavaMethod(declaringClass.getMethod(name, parameterTypes));
+        } catch (NoSuchMethodException e) {
+            throw GraalError.shouldNotReachHere(e);
+        }
     }
 
     private static final Constructor<MethodHandles.Lookup> LOOKUP_CONSTRUCTOR = ReflectionUtil.lookupConstructor(MethodHandles.Lookup.class, Class.class);
