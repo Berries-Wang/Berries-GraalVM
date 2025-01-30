@@ -1,22 +1,27 @@
 package com.oracle.svm.reflectionagent.analyzers;
 
 import jdk.internal.org.objectweb.asm.tree.AbstractInsnNode;
+import jdk.internal.org.objectweb.asm.tree.MethodInsnNode;
 import jdk.internal.org.objectweb.asm.tree.VarInsnNode;
 import jdk.internal.org.objectweb.asm.tree.analysis.Frame;
 import jdk.internal.org.objectweb.asm.tree.analysis.SourceValue;
 
 import java.util.Arrays;
+import java.util.Set;
 
 import static jdk.internal.org.objectweb.asm.Opcodes.ALOAD;
 import static jdk.internal.org.objectweb.asm.Opcodes.ASTORE;
 
 public abstract class ConstantValueAnalyzer {
+
     private final AbstractInsnNode[] instructions;
     private final Frame<SourceValue>[] frames;
+    private final Set<MethodInsnNode> constantCalls;
 
-    public ConstantValueAnalyzer(AbstractInsnNode[] instructions, Frame<SourceValue>[] frames) {
+    public ConstantValueAnalyzer(AbstractInsnNode[] instructions, Frame<SourceValue>[] frames, Set<MethodInsnNode> constantCalls) {
         this.instructions = instructions;
         this.frames = frames;
+        this.constantCalls = constantCalls;
     }
 
     public boolean isConstant(SourceValue value) {
@@ -34,6 +39,8 @@ public abstract class ConstantValueAnalyzer {
         } else if (sourceInstruction.getOpcode() == ASTORE) {
             SourceValue sourceValue = sourceInstructionFrame.getStack(sourceInstructionFrame.getStackSize() - 1);
             return isConstant(sourceValue);
+        } else if (sourceInstruction instanceof MethodInsnNode methodCall) {
+            return constantCalls.contains(methodCall);
         }
 
         return isConstant(value, sourceInstruction, sourceInstructionFrame);

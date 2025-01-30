@@ -36,10 +36,10 @@ import org.graalvm.nativeimage.c.type.CIntPointer;
 import org.graalvm.nativeimage.c.type.CTypeConversion;
 import org.graalvm.nativeimage.hosted.Feature;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.BiPredicate;
 
 import static com.oracle.svm.core.jni.JNIObjectHandles.nullHandle;
@@ -137,15 +137,16 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
 
     private static void instrumentMethod(MethodNode methodNode, ClassNode classNode) throws AnalyzerException {
         Analyzer<SourceValue> analyzer = new Analyzer<>(new SourceInterpreter());
-        Frame<SourceValue>[] frames = analyzer.analyze(classNode.name, methodNode);
+
         AbstractInsnNode[] instructions = methodNode.instructions.toArray();
+        Frame<SourceValue>[] frames = analyzer.analyze(classNode.name, methodNode);
+        Set<MethodInsnNode> constantCalls = new HashSet<>();
 
         AnalyzerSuite analyzerSuite = new AnalyzerSuite(
-                new ConstantStringAnalyzer(instructions, frames),
-                new ConstantBooleanAnalyzer(instructions, frames)
+                new ConstantStringAnalyzer(instructions, frames, constantCalls),
+                new ConstantBooleanAnalyzer(instructions, frames, constantCalls)
         );
 
-        List<MethodInsnNode> constantCalls = new ArrayList<>();
         for (int i = 0; i < instructions.length; i++) {
             if (instructions[i] instanceof MethodInsnNode methodCall) {
                 BiPredicate<AnalyzerSuite, CallContext> handler = REFLECTIVE_CALL_HANDLERS.get(new Signature(methodCall));
