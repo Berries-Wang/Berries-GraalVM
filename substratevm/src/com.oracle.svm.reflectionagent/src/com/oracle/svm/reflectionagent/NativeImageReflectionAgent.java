@@ -14,6 +14,7 @@ import com.oracle.svm.jvmtiagentbase.jvmti.JvmtiEventCallbacks;
 import com.oracle.svm.jvmtiagentbase.jvmti.JvmtiEventMode;
 import com.oracle.svm.jvmtiagentbase.jvmti.JvmtiInterface;
 import com.oracle.svm.reflectionagent.analyzers.ConstantBooleanAnalyzer;
+import com.oracle.svm.reflectionagent.analyzers.ConstantClassAnalyzer;
 import com.oracle.svm.reflectionagent.analyzers.ConstantStringAnalyzer;
 import jdk.internal.org.objectweb.asm.ClassReader;
 import jdk.internal.org.objectweb.asm.ClassWriter;
@@ -144,7 +145,8 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
 
         AnalyzerSuite analyzerSuite = new AnalyzerSuite(
                 new ConstantStringAnalyzer(instructions, frames, constantCalls),
-                new ConstantBooleanAnalyzer(instructions, frames, constantCalls)
+                new ConstantBooleanAnalyzer(instructions, frames, constantCalls),
+                new ConstantClassAnalyzer(instructions, frames, constantCalls)
         );
 
         for (int i = 0; i < instructions.length; i++) {
@@ -176,7 +178,8 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
 
     }
 
-    record AnalyzerSuite(ConstantStringAnalyzer stringAnalyzer, ConstantBooleanAnalyzer booleanAnalyzer) {
+    record AnalyzerSuite(ConstantStringAnalyzer stringAnalyzer, ConstantBooleanAnalyzer booleanAnalyzer,
+                         ConstantClassAnalyzer classAnalyzer) {
 
     }
 
