@@ -200,11 +200,7 @@ public class ConstantArrayAnalyzer {
                 SourceValue sourceValue = sourceInstructionFrame.getLocal(((VarInsnNode) sourceInstruction).var);
                 yield traceArrayRefToOrigin(sourceValue);
             }
-            case ASTORE -> {
-                SourceValue sourceValue = sourceInstructionFrame.getStack(0);
-                yield traceArrayRefToOrigin(sourceValue);
-            }
-            case DUP -> {
+            case ASTORE, DUP -> {
                 SourceValue sourceValue = sourceInstructionFrame.getStack(sourceInstructionFrame.getStackSize() - 1);
                 yield traceArrayRefToOrigin(sourceValue);
             }

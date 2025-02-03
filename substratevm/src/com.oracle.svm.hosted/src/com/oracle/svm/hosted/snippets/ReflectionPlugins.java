@@ -810,6 +810,7 @@ public final class ReflectionPlugins {
 
     private void traceConstant(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Object value, boolean shouldReportAgainstStrictMode) {
         if (reason.duringAnalysis() && reason != ParsingReason.JITCompilation) {
+            System.out.println(targetMethod);
             if (ReflectionPluginsTracingFeature.isEnabled() && !(ReflectionPluginsTracingFeature.Options.ReflectionPluginTraceUserOnly.getValue() && !isUserProvided(b))) {
                 ReflectionPluginsTracingFeature.traceConstant(b.getCallStack(), targetMethod, targetCaller, targetArguments, value);
             }
@@ -821,6 +822,7 @@ public final class ReflectionPlugins {
 
     private void traceException(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Class<? extends Throwable> exceptionClass, boolean shouldReportAgainstStrictMode) {
         if (reason.duringAnalysis() && reason != ParsingReason.JITCompilation) {
+            System.out.println(targetMethod);
             if (ReflectionPluginsTracingFeature.isEnabled() && !(ReflectionPluginsTracingFeature.Options.ReflectionPluginTraceUserOnly.getValue() && !isUserProvided(b))) {
                 ReflectionPluginsTracingFeature.traceException(b.getCallStack(), targetMethod, targetCaller, targetArguments, exceptionClass);
             }

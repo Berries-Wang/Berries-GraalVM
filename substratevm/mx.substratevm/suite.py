@@ -1523,6 +1523,7 @@ suite = {
             ],
             "dependencies": [
                 "JVMTI_AGENT_BASE",
+                "com.oracle.svm.configure",
             ],
             "requiresConcealed" : {
                 "java.base" : [
@@ -2067,10 +2068,12 @@ suite = {
             "description" : "Native-image agent for constant reflection detection",
             "dependencies": [
                 "com.oracle.svm.reflectionagent",
+                "com.oracle.svm.configure",
             ],
             "distDependencies": [
                 "JVMTI_AGENT_BASE",
                 "LIBRARY_SUPPORT",
+                "SVM_CONFIGURE"
             ],
             "moduleInfo" : {
                 "name" : "org.graalvm.nativeimage.agent.reflection",
@@ -2098,6 +2101,7 @@ suite = {
                 "name" : "org.graalvm.nativeimage.configure",
                 "exports" : [
                     "* to org.graalvm.nativeimage.agent.tracing",
+                    "* to org.graalvm.nativeimage.agent.reflection",
                     "com.oracle.svm.configure",
                     "com.oracle.svm.configure.command",
                 ],

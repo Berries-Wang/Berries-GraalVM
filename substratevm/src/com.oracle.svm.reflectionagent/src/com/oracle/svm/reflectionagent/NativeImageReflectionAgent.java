@@ -1,5 +1,6 @@
 package com.oracle.svm.reflectionagent;
 
+import com.oracle.svm.configure.trace.AccessAdvisor;
 import com.oracle.svm.core.annotate.ConstantTags;
 import com.oracle.svm.core.c.function.CEntryPointOptions;
 import com.oracle.svm.core.jni.headers.JNIEnvironment;
@@ -48,6 +49,7 @@ import java.util.function.BiPredicate;
 
 import static com.oracle.svm.core.jni.JNIObjectHandles.nullHandle;
 import static com.oracle.svm.jvmtiagentbase.Support.check;
+import static com.oracle.svm.jvmtiagentbase.Support.fromCString;
 import static com.oracle.svm.jvmtiagentbase.Support.jniFunctions;
 import static com.oracle.svm.jvmtiagentbase.jvmti.JvmtiEvent.JVMTI_EVENT_CLASS_FILE_LOAD_HOOK;
 
@@ -92,6 +94,11 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
                                             JNIObjectHandle loader, CCharPointer name, JNIObjectHandle protectionDomain, int classDataLen, CCharPointer classData,
                                             CIntPointer newClassDataLen, CCharPointerPointer newClassData) {
         if (shouldIgnoreClassLoader(jni, loader)) {
+            return;
+        }
+
+        String className = CTypeConversion.toJavaString(name);
+        if (AccessAdvisor.PROXY_CLASS_NAME_PATTERN.matcher(className).matches()) {
             return;
         }
 
