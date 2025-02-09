@@ -44,7 +44,6 @@ import java.nio.ByteOrder;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -357,14 +356,6 @@ public final class ReflectionPlugins {
                 return processClassGetClassLoader(b, targetMethod, receiver);
             }
         });
-    }
-
-    private static ResolvedJavaMethod getOriginalFromConstantTag(MetaAccessProvider metaAccess, Class<?> declaringClass, String name, Class<?>... parameterTypes) {
-        try {
-            return metaAccess.lookupJavaMethod(declaringClass.getMethod(name, parameterTypes));
-        } catch (NoSuchMethodException e) {
-            throw GraalError.shouldNotReachHere(e);
-        }
     }
 
     private static final Constructor<MethodHandles.Lookup> LOOKUP_CONSTRUCTOR = ReflectionUtil.lookupConstructor(MethodHandles.Lookup.class, Class.class);
@@ -798,13 +789,14 @@ public final class ReflectionPlugins {
          * We don't want the user to know about the strict mode constant tags, so we're
          * replacing them method name in the synthesized exception message with the original.
          */
+        ResolvedJavaMethod throwingMethod = targetMethod;
         if (SubstrateOptions.EnableStrictReflection.getValue()) {
             ResolvedJavaMethod originalMethod = strictReflectionSupport.getOriginalMethod(targetMethod, b.getMetaAccess());
             if (originalMethod != null) {
-                targetMethod = originalMethod;
+                throwingMethod = originalMethod;
             }
         }
-        String message = originalMessage + ". This exception was synthesized during native image building from a call to " + targetMethod.format("%H.%n(%p)") +
+        String message = originalMessage + ". This exception was synthesized during native image building from a call to " + throwingMethod.format("%H.%n(%p)") +
                         " with constant arguments.";
         ExceptionSynthesizer.throwException(b, exceptionMethod, message);
         return true;
@@ -1039,7 +1031,7 @@ final class ReflectionPluginsTracingFeature implements InternalFeature {
             this.location = location;
         }
 
-        public abstract void dump(Iterable<TraceEntry> log);
+        public abstract void dump(Iterable<TraceEntry> constantReflectionLog);
     }
 
     private static final class ReflectionPluginPlainLogSupport extends ReflectionPluginLogSupport {
@@ -1049,9 +1041,9 @@ final class ReflectionPluginsTracingFeature implements InternalFeature {
         }
 
         @Override
-        public void dump(Iterable<TraceEntry> log) {
+        public void dump(Iterable<TraceEntry> constantReflectionLog) {
             try (PrintStream out = new PrintStream(new BufferedOutputStream(new FileOutputStream(location)))) {
-                log.forEach(out::println);
+                constantReflectionLog.forEach(out::println);
             } catch (FileNotFoundException e) {
                 throw new RuntimeException(e);
             }
@@ -1065,10 +1057,10 @@ final class ReflectionPluginsTracingFeature implements InternalFeature {
         }
 
         @Override
-        public void dump(Iterable<TraceEntry> log) {
+        public void dump(Iterable<TraceEntry> constantReflectionLog) {
             try (JsonWriter out = new JsonPrettyWriter(Path.of(location))) {
                 try (JsonBuilder.ArrayBuilder arrayBuilder = out.arrayBuilder()) {
-                    for (TraceEntry entry : log) {
+                    for (TraceEntry entry : constantReflectionLog) {
                         try (JsonBuilder.ObjectBuilder objectBuilder = arrayBuilder.nextEntry().object()) {
                             entry.toJson(objectBuilder);
                         }
