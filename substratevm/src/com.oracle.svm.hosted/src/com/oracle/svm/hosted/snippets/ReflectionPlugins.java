@@ -44,8 +44,10 @@ import java.nio.ByteOrder;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
@@ -133,6 +135,7 @@ public final class ReflectionPlugins {
     private final ParsingReason reason;
     private final FallbackFeature fallbackFeature;
     private final ClassInitializationSupport classInitializationSupport;
+    private final StrictReflectionSupport strictReflectionSupport;
 
     private ReflectionPlugins(ImageClassLoader imageClassLoader, AnnotationSubstitutionProcessor annotationSubstitutions,
                     ClassInitializationPlugin classInitializationPlugin, AnalysisUniverse aUniverse, ParsingReason reason, FallbackFeature fallbackFeature) {
@@ -144,6 +147,7 @@ public final class ReflectionPlugins {
         this.fallbackFeature = fallbackFeature;
 
         this.classInitializationSupport = (ClassInitializationSupport) ImageSingletons.lookup(RuntimeClassInitializationSupport.class);
+        this.strictReflectionSupport = new StrictReflectionSupport();
     }
 
     public static void registerInvocationPlugins(ImageClassLoader imageClassLoader, AnnotationSubstitutionProcessor annotationSubstitutions,
@@ -153,7 +157,7 @@ public final class ReflectionPlugins {
         rp.registerClassPlugins(plugins);
 
         if (SubstrateOptions.EnableStrictReflection.getValue()) {
-            rp.registerStrictModePlugins(plugins);
+            rp.strictReflectionSupport.registerStrictModePlugins(plugins);
         }
     }
 
@@ -332,7 +336,7 @@ public final class ReflectionPlugins {
         r.register(new RequiredInvocationPlugin("forName", String.class) {
             @Override
             public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode nameNode) {
-                return processClassForName(b, targetMethod, nameNode, ConstantNode.forBoolean(true), false);
+                return processClassForName(b, targetMethod, nameNode, ConstantNode.forBoolean(true));
             }
         });
         r.register(new RequiredInvocationPlugin("forName", String.class, boolean.class, ClassLoader.class) {
@@ -344,31 +348,13 @@ public final class ReflectionPlugins {
                  * time. We assume that every class loader used at run time delegates to the
                  * application class loader.
                  */
-                return processClassForName(b, targetMethod, nameNode, initializeNode, false);
+                return processClassForName(b, targetMethod, nameNode, initializeNode);
             }
         });
         r.register(new RequiredInvocationPlugin("getClassLoader", Receiver.class) {
             @Override
             public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver) {
                 return processClassGetClassLoader(b, targetMethod, receiver);
-            }
-        });
-    }
-
-    private void registerStrictModePlugins(InvocationPlugins plugins) {
-        Registration r = new Registration(plugins, ConstantTags.class);
-        r.register(new RequiredInvocationPlugin("forName", String.class) {
-            @Override
-            public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode nameNode) {
-                ResolvedJavaMethod original = getOriginalFromConstantTag(b.getMetaAccess(), Class.class, "forName", String.class);
-                return processClassForName(b, original, nameNode, ConstantNode.forBoolean(true), true);
-            }
-        });
-        r.register(new RequiredInvocationPlugin("forName", String.class, boolean.class, ClassLoader.class) {
-            @Override
-            public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode nameNode, ValueNode initializeNode, ValueNode classLoaderNode) {
-                ResolvedJavaMethod original = getOriginalFromConstantTag(b.getMetaAccess(), Class.class, "forName", String.class, boolean.class, ClassLoader.class);
-                return processClassForName(b, original, nameNode, initializeNode, true);
             }
         });
     }
@@ -405,9 +391,9 @@ public final class ReflectionPlugins {
             /* The constructor of Lookup is not public, so we need to invoke it via reflection. */
             lookup = LOOKUP_CONSTRUCTOR.newInstance(callerClass);
         } catch (Throwable ex) {
-            return throwException(b, targetMethod, null, new Object[] {}, ex.getClass(), ex.getMessage(), false);
+            return throwException(b, targetMethod, null, new Object[] {}, ex.getClass(), ex.getMessage());
         }
-        return pushConstant(b, targetMethod, null, new Object[] {}, JavaKind.Object, lookup, false, false) != null;
+        return pushConstant(b, targetMethod, null, new Object[] {}, JavaKind.Object, lookup, false) != null;
     }
 
     /**
@@ -415,7 +401,7 @@ public final class ReflectionPlugins {
      * {@link ImageClassLoader} to look up the class name, not the class loader that loaded the
      * native image generator.
      */
-    private boolean processClassForName(GraphBuilderContext b, ResolvedJavaMethod targetMethod, ValueNode nameNode, ValueNode initializeNode, boolean isStrict) {
+    private boolean processClassForName(GraphBuilderContext b, ResolvedJavaMethod targetMethod, ValueNode nameNode, ValueNode initializeNode) {
         Object classNameValue = unbox(b, nameNode, JavaKind.Object);
         Object initializeValue = unbox(b, initializeNode, JavaKind.Boolean);
 
@@ -435,14 +421,14 @@ public final class ReflectionPlugins {
         TypeResult<Class<?>> typeResult = imageClassLoader.findClass(className, false);
         if (!typeResult.isPresent()) {
             Throwable e = typeResult.getException();
-            return throwException(b, targetMethod, null, argValues, e.getClass(), e.getMessage(), isStrict);
+            return throwException(b, targetMethod, null, argValues, e.getClass(), e.getMessage());
         }
         Class<?> clazz = typeResult.get();
         if (PredefinedClassesSupport.isPredefined(clazz)) {
             return false;
         }
 
-        JavaConstant classConstant = pushConstant(b, targetMethod, null, argValues, JavaKind.Object, clazz, false, isStrict);
+        JavaConstant classConstant = pushConstant(b, targetMethod, null, argValues, JavaKind.Object, clazz, false);
         if (classConstant == null) {
             return false;
         }
@@ -480,7 +466,7 @@ public final class ReflectionPlugins {
 
         if (result != null) {
             b.addPush(JavaKind.Object, ConstantNode.forConstant(result, b.getMetaAccess()));
-            traceConstant(b, targetMethod, clazz, new Object[] {}, result, false);
+            traceConstant(b, targetMethod, clazz, new Object[] {}, result);
             return true;
         }
 
@@ -571,9 +557,9 @@ public final class ReflectionPlugins {
         try {
             returnValue = reflectionMethod.invoke(receiverValue, argValues);
         } catch (InvocationTargetException ex) {
-            return throwException(b, targetMethod, receiverValue, argValues, ex.getTargetException().getClass(), ex.getTargetException().getMessage(), false);
+            return throwException(b, targetMethod, receiverValue, argValues, ex.getTargetException().getClass(), ex.getTargetException().getMessage());
         } catch (Throwable ex) {
-            return throwException(b, targetMethod, receiverValue, argValues, ex.getClass(), ex.getMessage(), false);
+            return throwException(b, targetMethod, receiverValue, argValues, ex.getClass(), ex.getMessage());
         }
 
         JavaKind returnKind = targetMethod.getSignature().getReturnKind();
@@ -581,11 +567,11 @@ public final class ReflectionPlugins {
             /*
              * The target method is a side-effect free void method that did not throw an exception.
              */
-            traceConstant(b, targetMethod, receiverValue, argValues, JavaKind.Void, false);
+            traceConstant(b, targetMethod, receiverValue, argValues, JavaKind.Void);
             return true;
         }
 
-        return pushConstant(b, targetMethod, receiverValue, argValues, returnKind, returnValue, false, false) != null;
+        return pushConstant(b, targetMethod, receiverValue, argValues, returnKind, returnValue, false) != null;
     }
 
     private <T> void registerBulkInvocationPlugin(InvocationPlugins plugins, Class<T> declaringClass, String methodName, Consumer<T> registrationCallback) {
@@ -616,7 +602,7 @@ public final class ReflectionPlugins {
         }
 
         b.add(ReachabilityRegistrationNode.create(() -> registerForRuntimeReflection((T) receiverValue, registrationCallback), reason));
-        traceConstant(b, targetMethod, receiverValue, new Object[]{}, new Object[]{}, false);
+        traceConstant(b, targetMethod, receiverValue, new Object[]{}, new Object[]{});
         return true;
     }
 
@@ -770,7 +756,7 @@ public final class ReflectionPlugins {
     }
 
     private JavaConstant pushConstant(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, JavaKind returnKind, Object returnValue,
-                    boolean allowNullReturnValue, boolean isStrict) {
+                    boolean allowNullReturnValue) {
         Object intrinsicValue = getIntrinsic(b, returnValue == null && allowNullReturnValue ? NULL_MARKER : returnValue);
         if (intrinsicValue == null) {
             return null;
@@ -786,12 +772,12 @@ public final class ReflectionPlugins {
         }
 
         b.addPush(returnKind, ConstantNode.forConstant(intrinsicConstant, b.getMetaAccess()));
-        traceConstant(b, targetMethod, targetCaller, targetArguments, intrinsicValue, isStrict);
+        traceConstant(b, targetMethod, targetCaller, targetArguments, intrinsicValue);
         return intrinsicConstant;
     }
 
     private boolean throwException(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Class<? extends Throwable> exceptionClass,
-                                   String originalMessage, boolean isStrict) {
+                                   String originalMessage) {
         /* Get the exception throwing method that has a message parameter. */
         Method exceptionMethod = ExceptionSynthesizer.throwExceptionMethodOrNull(exceptionClass, String.class);
         if (exceptionMethod == null) {
@@ -802,24 +788,69 @@ public final class ReflectionPlugins {
             return false;
         }
 
-        traceException(b, targetMethod, targetCaller, targetArguments, exceptionClass, isStrict);
+        /*
+         * Because tracing adds a ReachabilityRegistrationNode to the graph, it has to
+         * happen before exception synthesis.
+         */
+        traceException(b, targetMethod, targetCaller, targetArguments, exceptionClass);
+
+        /*
+         * We don't want the user to know about the strict mode constant tags, so we're
+         * replacing them method name in the synthesized exception message with the original.
+         */
+        if (SubstrateOptions.EnableStrictReflection.getValue()) {
+            ResolvedJavaMethod originalMethod = strictReflectionSupport.getOriginalMethod(targetMethod, b.getMetaAccess());
+            if (originalMethod != null) {
+                targetMethod = originalMethod;
+            }
+        }
         String message = originalMessage + ". This exception was synthesized during native image building from a call to " + targetMethod.format("%H.%n(%p)") +
                         " with constant arguments.";
         ExceptionSynthesizer.throwException(b, exceptionMethod, message);
         return true;
     }
 
-    private void traceConstant(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Object value, boolean isStrict) {
+    private void traceConstant(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Object value) {
         if (reason.duringAnalysis() && reason != ParsingReason.JITCompilation && ReflectionPluginsTracingFeature.isEnabled()) {
             List<StackTraceElement> callStack = b.getCallStack();
-            b.add(ReachabilityRegistrationNode.create(() -> ReflectionPluginsTracingFeature.traceConstant(callStack, targetMethod, targetCaller, targetArguments, value, isStrict), reason));
+            b.add(ReachabilityRegistrationNode.create(() -> ReflectionPluginsTracingFeature.traceConstant(callStack, targetMethod, targetCaller, targetArguments, value), reason));
         }
     }
 
-    private void traceException(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Class<? extends Throwable> exceptionClass, boolean isStrict) {
+    private void traceException(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Class<? extends Throwable> exceptionClass) {
         if (reason.duringAnalysis() && reason != ParsingReason.JITCompilation && ReflectionPluginsTracingFeature.isEnabled()) {
             List<StackTraceElement> callStack = b.getCallStack();
-            b.add(ReachabilityRegistrationNode.create(() -> ReflectionPluginsTracingFeature.traceException(callStack, targetMethod, targetCaller, targetArguments, exceptionClass, isStrict), reason));
+            b.add(ReachabilityRegistrationNode.create(() -> ReflectionPluginsTracingFeature.traceException(callStack, targetMethod, targetCaller, targetArguments, exceptionClass), reason));
+        }
+    }
+
+    private class StrictReflectionSupport {
+
+        public ResolvedJavaMethod getOriginalMethod(ResolvedJavaMethod targetMethod, MetaAccessProvider access) {
+            for (Map.Entry<Method, Method> entry : ConstantTags.TAG_TO_ORIGINAL_MAPPING.entrySet()) {
+                if (access.lookupJavaMethod(entry.getKey()).equals(targetMethod)) {
+                    return access.lookupJavaMethod(entry.getValue());
+                }
+            }
+            return null;
+        }
+
+        public void registerStrictModePlugins(InvocationPlugins plugins) {
+            Registration r = new Registration(plugins, ConstantTags.class);
+            r.register(new RequiredInvocationPlugin("forName", String.class) {
+                @Override
+                public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode nameNode) {
+                    return processClassForName(b, targetMethod, nameNode, ConstantNode.forBoolean(true));
+                }
+            });
+            r.register(new RequiredInvocationPlugin("forName", String.class, boolean.class, ClassLoader.class) {
+                @Override
+                public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode nameNode, ValueNode initializeNode, ValueNode classLoaderNode) {
+                    return processClassForName(b, targetMethod, nameNode, initializeNode);
+                }
+            });
+            registerFoldInvocationPlugins(plugins, ConstantTags.class,
+                    "getField", "getDeclaredField", "getConstructor", "getDeclaredConstructor", "getMethod", "getDeclaredMethod");
         }
     }
 }
@@ -875,8 +906,7 @@ final class ReflectionPluginsTracingFeature implements InternalFeature {
             if (SubstrateOptions.EnableStrictReflection.getValue()) {
                 log.stream()
                         .filter(ReflectionPluginsTracingFeature::isUserProvided)
-                        .filter(ReflectionPluginsTracingFeature::isTargetedByStrictMode)
-                        .filter(entry -> !entry.isStrict())
+                        .filter(ReflectionPluginsTracingFeature::missedByStrictMode)
                         .forEach(entry -> LogUtils.warning(entry +
                             " outside of the strict constant reflection mode." +
                             " Consider adding the appropriate entry to your reachability metadata" +
@@ -899,20 +929,21 @@ final class ReflectionPluginsTracingFeature implements InternalFeature {
         }
     }
 
-    private static boolean isTargetedByStrictMode(TraceEntry entry) {
-        return strictModeTargets.contains(entry.targetMethod.getName());
+    private static boolean missedByStrictMode(TraceEntry entry) {
+        return entry.targetMethod.getDeclaringClass().toJavaName(true).equals("java.lang.Class")
+                && strictModeTargets.contains(entry.targetMethod.getName());
     }
 
     public static boolean isEnabled() {
         return SubstrateOptions.EnableStrictReflection.getValue() || logger != null;
     }
 
-    public static void traceConstant(List<StackTraceElement> callStack, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Object value, boolean isStrict) {
-        log.add(new ConstantTraceEntry(callStack, targetMethod, targetCaller, targetArguments, value, isStrict));
+    public static void traceConstant(List<StackTraceElement> callStack, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Object value) {
+        log.add(new ConstantTraceEntry(callStack, targetMethod, targetCaller, targetArguments, value));
     }
 
-    public static void traceException(List<StackTraceElement> callStack, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Class<? extends Throwable> exceptionClass, boolean isStrict) {
-        log.add(new ExceptionTraceEntry(callStack, targetMethod, targetCaller, targetArguments, exceptionClass, isStrict));
+    public static void traceException(List<StackTraceElement> callStack, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Class<? extends Throwable> exceptionClass) {
+        log.add(new ExceptionTraceEntry(callStack, targetMethod, targetCaller, targetArguments, exceptionClass));
     }
 
     private abstract static class TraceEntry {
@@ -921,14 +952,12 @@ final class ReflectionPluginsTracingFeature implements InternalFeature {
         private final ResolvedJavaMethod targetMethod;
         private final Object targetCaller;
         private final Object[] targetArguments;
-        private final boolean isStrict;
 
-        TraceEntry(List<StackTraceElement> callStack, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, boolean isStrict) {
+        TraceEntry(List<StackTraceElement> callStack, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments) {
             this.callStack = callStack;
             this.targetMethod = targetMethod;
             this.targetCaller = targetCaller;
             this.targetArguments = targetArguments;
-            this.isStrict = isStrict;
         }
 
         @Override
@@ -958,18 +987,14 @@ final class ReflectionPluginsTracingFeature implements InternalFeature {
                 }
             }
         }
-
-        public boolean isStrict() {
-            return isStrict;
-        }
     }
 
     private static class ConstantTraceEntry extends TraceEntry {
 
         private final Object value;
 
-        ConstantTraceEntry(List<StackTraceElement> callStack, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Object value, boolean isStrict) {
-            super(callStack, targetMethod, targetCaller, targetArguments, isStrict);
+        ConstantTraceEntry(List<StackTraceElement> callStack, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Object value) {
+            super(callStack, targetMethod, targetCaller, targetArguments);
             this.value = value;
         }
 
@@ -989,8 +1014,8 @@ final class ReflectionPluginsTracingFeature implements InternalFeature {
 
         private final Class<? extends Throwable> exceptionClass;
 
-        ExceptionTraceEntry(List<StackTraceElement> callStack, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Class<? extends Throwable> exceptionClass, boolean isStrict) {
-            super(callStack, targetMethod, targetCaller, targetArguments, isStrict);
+        ExceptionTraceEntry(List<StackTraceElement> callStack, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Class<? extends Throwable> exceptionClass) {
+            super(callStack, targetMethod, targetCaller, targetArguments);
             this.exceptionClass = exceptionClass;
         }
 

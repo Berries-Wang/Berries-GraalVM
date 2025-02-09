@@ -43,6 +43,9 @@ package com.oracle.svm.core.annotate;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Used for representing constant reflection calls caught by {@link com.oracle.svm.reflectionagent}.
@@ -52,6 +55,25 @@ import java.lang.reflect.Method;
  * image run-time.
  */
 public final class ConstantTags {
+
+    public static final Map<Method, Method> TAG_TO_ORIGINAL_MAPPING;
+
+    static {
+        Map<Method, Method> mapping = new HashMap<>();
+        try {
+            mapping.put(ConstantTags.class.getDeclaredMethod("forName", String.class), Class.class.getDeclaredMethod("forName", String.class));
+            mapping.put(ConstantTags.class.getDeclaredMethod("forName", String.class, boolean.class, ClassLoader.class), Class.class.getDeclaredMethod("forName", String.class, boolean.class, ClassLoader.class));
+            mapping.put(ConstantTags.class.getDeclaredMethod("getField", Class.class, String.class), Class.class.getDeclaredMethod("getField", String.class));
+            mapping.put(ConstantTags.class.getDeclaredMethod("getDeclaredField", Class.class, String.class), Class.class.getDeclaredMethod("getDeclaredField", String.class));
+            mapping.put(ConstantTags.class.getDeclaredMethod("getConstructor", Class.class, Class[].class), Class.class.getDeclaredMethod("getConstructor", Class[].class));
+            mapping.put(ConstantTags.class.getDeclaredMethod("getDeclaredConstructor", Class.class, Class[].class), Class.class.getDeclaredMethod("getDeclaredConstructor", Class[].class));
+            mapping.put(ConstantTags.class.getDeclaredMethod("getMethod", Class.class, String.class, Class[].class), Class.class.getDeclaredMethod("getMethod", String.class, Class[].class));
+            mapping.put(ConstantTags.class.getDeclaredMethod("getDeclaredMethod", Class.class, String.class, Class[].class), Class.class.getDeclaredMethod("getDeclaredMethod", String.class, Class[].class));
+        } catch (NoSuchMethodException e) {
+            throw new RuntimeException(e);
+        }
+        TAG_TO_ORIGINAL_MAPPING = Collections.unmodifiableMap(mapping);
+    }
 
     private static final StackWalker stackWalker = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
 
