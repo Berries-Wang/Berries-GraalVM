@@ -803,7 +803,10 @@ public final class ReflectionPlugins {
 
     private void traceConstant(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Object value) {
         if (reason.duringAnalysis() && reason != ParsingReason.JITCompilation && ReflectionPluginsTracingFeature.isEnabled()) {
-            /* We're capturing the call stack here in order to avoid late binding in the reachability node callback. */
+            /*
+             * We're capturing the call stack here in order to avoid late binding in the
+             * reachability node callback.
+             */
             List<StackTraceElement> callStack = b.getCallStack();
             b.add(ReachabilityRegistrationNode.create(() -> ReflectionPluginsTracingFeature.traceConstant(callStack, targetMethod, targetCaller, targetArguments, value), reason));
         }
@@ -811,7 +814,10 @@ public final class ReflectionPlugins {
 
     private void traceException(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Class<? extends Throwable> exceptionClass) {
         if (reason.duringAnalysis() && reason != ParsingReason.JITCompilation && ReflectionPluginsTracingFeature.isEnabled()) {
-            /* We're capturing the call stack here in order to avoid late binding in the reachability node callback. */
+            /*
+             * We're capturing the call stack here in order to avoid late binding in the
+             * reachability node callback.
+             */
             List<StackTraceElement> callStack = b.getCallStack();
             b.add(ReachabilityRegistrationNode.create(() -> ReflectionPluginsTracingFeature.traceException(callStack, targetMethod, targetCaller, targetArguments, exceptionClass), reason));
         }
