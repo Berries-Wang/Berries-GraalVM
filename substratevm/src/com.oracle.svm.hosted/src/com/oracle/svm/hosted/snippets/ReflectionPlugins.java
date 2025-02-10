@@ -68,7 +68,6 @@ import jdk.graal.compiler.util.json.JsonBuilder;
 import jdk.graal.compiler.util.json.JsonPrettyWriter;
 import jdk.graal.compiler.util.json.JsonWriter;
 import org.graalvm.nativeimage.ImageSingletons;
-import org.graalvm.nativeimage.c.type.CTypeConversion;
 import org.graalvm.nativeimage.hosted.RuntimeReflection;
 import org.graalvm.nativeimage.impl.RuntimeClassInitializationSupport;
 
