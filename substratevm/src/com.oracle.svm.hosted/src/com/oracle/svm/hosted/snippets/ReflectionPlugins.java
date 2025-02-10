@@ -863,10 +863,10 @@ final class ReflectionPluginsTracingFeature implements InternalFeature {
     }
 
     private static final Queue<TraceEntry> log = new ConcurrentLinkedQueue<>();
-    private static ReflectionPluginLogSupport logger = null;
-
-    private static ImageClassLoader imageClassLoader;
     private static final Set<String> strictModeTargets = Arrays.stream(ConstantTags.class.getDeclaredMethods()).map(Method::getName).collect(Collectors.toUnmodifiableSet());
+
+    private ImageClassLoader imageClassLoader;
+    private ReflectionPluginLogSupport logger;
 
     @Override
     public void afterRegistration(AfterRegistrationAccess access) {
@@ -885,10 +885,10 @@ final class ReflectionPluginsTracingFeature implements InternalFeature {
     public void afterAnalysis(AfterAnalysisAccess access) {
         if (isEnabled()) {
             if (logger != null) {
-                logger.dump(Options.ReflectionPluginTraceUserOnly.getValue() ? log.stream().filter(ReflectionPluginsTracingFeature::isUserProvided).toList() : log);
+                logger.dump(Options.ReflectionPluginTraceUserOnly.getValue() ? log.stream().filter(this::isUserProvided).toList() : log);
             }
             if (SubstrateOptions.EnableStrictReflection.getValue()) {
-                log.stream().filter(ReflectionPluginsTracingFeature::isUserProvided)
+                log.stream().filter(this::isUserProvided)
                                 .filter(ReflectionPluginsTracingFeature::missedByStrictMode)
                                 .forEach(entry -> LogUtils.warning(entry +
                                                 " outside of the strict constant reflection mode." +
@@ -902,7 +902,7 @@ final class ReflectionPluginsTracingFeature implements InternalFeature {
      * Checks if the entry was created in a user provided class (class loaded by
      * NativeImageClassLoader).
      */
-    private static boolean isUserProvided(TraceEntry entry) {
+    private boolean isUserProvided(TraceEntry entry) {
         String className = entry.callStack.getFirst().getClassName();
         TypeResult<Class<?>> clazz = imageClassLoader.findClass(className);
         if (!clazz.isPresent()) {
@@ -918,7 +918,7 @@ final class ReflectionPluginsTracingFeature implements InternalFeature {
     }
 
     public static boolean isEnabled() {
-        return SubstrateOptions.EnableStrictReflection.getValue() || logger != null;
+        return SubstrateOptions.EnableStrictReflection.getValue() || Options.ReflectionPluginTraceLocation.getValue() != null;
     }
 
     public static void traceConstant(List<StackTraceElement> callStack, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Object value) {
