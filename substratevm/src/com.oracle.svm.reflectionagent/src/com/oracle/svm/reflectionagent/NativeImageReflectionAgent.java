@@ -86,20 +86,28 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
 
     private static Map<MethodCallUtils.Signature, BiPredicate<AnalyzerSuite, CallContext>> createReflectiveCallHandlers() {
         Map<MethodCallUtils.Signature, BiPredicate<AnalyzerSuite, CallContext>> callHandlers = new HashMap<>();
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "forName", "(Ljava/lang/String;)Ljava/lang/Class;"), NativeImageReflectionAgent::isForName1Constant);
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "forName", "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;"), NativeImageReflectionAgent::isForName3Constant);
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getField", "(Ljava/lang/String;)Ljava/lang/reflect/Field;"), NativeImageReflectionAgent::isFieldQueryConstant);
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredField", "(Ljava/lang/String;)Ljava/lang/reflect/Field;"), NativeImageReflectionAgent::isFieldQueryConstant);
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getConstructor", "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;"), NativeImageReflectionAgent::isConstructorQueryConstant);
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredConstructor", "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;"), NativeImageReflectionAgent::isConstructorQueryConstant);
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getMethod", "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;"), NativeImageReflectionAgent::isMethodQueryConstant);
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredMethod", "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;"), NativeImageReflectionAgent::isMethodQueryConstant);
+        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "forName", "(Ljava/lang/String;)Ljava/lang/Class;"),
+                        NativeImageReflectionAgent::isForName1Constant);
+        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "forName", "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;"),
+                        NativeImageReflectionAgent::isForName3Constant);
+        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getField", "(Ljava/lang/String;)Ljava/lang/reflect/Field;"),
+                        NativeImageReflectionAgent::isFieldQueryConstant);
+        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredField", "(Ljava/lang/String;)Ljava/lang/reflect/Field;"),
+                        NativeImageReflectionAgent::isFieldQueryConstant);
+        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getConstructor", "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;"),
+                        NativeImageReflectionAgent::isConstructorQueryConstant);
+        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredConstructor", "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;"),
+                        NativeImageReflectionAgent::isConstructorQueryConstant);
+        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getMethod", "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;"),
+                        NativeImageReflectionAgent::isMethodQueryConstant);
+        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredMethod", "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;"),
+                        NativeImageReflectionAgent::isMethodQueryConstant);
         return callHandlers;
     }
 
     private static final CEntryPointLiteral<CFunctionPointer> ON_CLASS_FILE_LOAD_HOOK = CEntryPointLiteral.create(NativeImageReflectionAgent.class, "onClassFileLoadHook",
-            JvmtiEnv.class, JNIEnvironment.class, JNIObjectHandle.class, JNIObjectHandle.class, CCharPointer.class, JNIObjectHandle.class, int.class, CCharPointer.class, CIntPointer.class,
-            CCharPointerPointer.class);
+                JvmtiEnv.class, JNIEnvironment.class, JNIObjectHandle.class, JNIObjectHandle.class, CCharPointer.class, JNIObjectHandle.class, int.class, CCharPointer.class, CIntPointer.class,
+                CCharPointerPointer.class);
 
     @Override
     protected JNIHandleSet constructJavaHandles(JNIEnvironment env) {

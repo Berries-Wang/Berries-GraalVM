@@ -1360,6 +1360,6 @@ public class SubstrateOptions {
         }
     });
 
-    @Option(help = "Enable the deterministic, bytecode level analysis for constant reflection usage.")
+    @Option(help = "Enable the deterministic, bytecode level analysis for constant reflection usage.")//
     public static final HostedOptionKey<Boolean> EnableStrictReflection = new HostedOptionKey<>(false);
 }

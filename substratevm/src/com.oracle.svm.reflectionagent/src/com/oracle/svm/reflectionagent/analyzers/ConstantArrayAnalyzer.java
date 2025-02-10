@@ -75,8 +75,7 @@ public class ConstantArrayAnalyzer {
     private final Set<MethodCallUtils.Signature> safeMethods;
     private final ConstantValueAnalyzer valueAnalyzer;
 
-    public ConstantArrayAnalyzer(AbstractInsnNode[] instructions, ControlFlowGraphNode<SourceValue>[] frames,
-                                 Set<MethodCallUtils.Signature> safeMethods, ConstantValueAnalyzer valueAnalyzer) {
+    public ConstantArrayAnalyzer(AbstractInsnNode[] instructions, ControlFlowGraphNode<SourceValue>[] frames, Set<MethodCallUtils.Signature> safeMethods, ConstantValueAnalyzer valueAnalyzer) {
         this.instructions = instructions;
         this.frames = frames;
         this.safeMethods = safeMethods;
@@ -186,19 +185,20 @@ public class ConstantArrayAnalyzer {
         }
 
         MethodInsnNode methodCall = (MethodInsnNode) instruction;
-        // Check if method call is considered safe i.e. it is one of the reflective call methods we're analysing.
+        // Check if method call is considered safe i.e. it is one of the reflective call methods
+        // we're analyzing.
         if (safeMethods.contains(new MethodCallUtils.Signature(methodCall))) {
             return false;
         }
 
         int numOfArgs = Type.getArgumentTypes(methodCall.desc).length;
         return IntStream.range(0, numOfArgs)
-                .anyMatch(i -> loadedValueTracesToStore(MethodCallUtils.getCallArg(methodCall, i, frame), originalStoreInstruction));
+                    .anyMatch(i -> loadedValueTracesToStore(MethodCallUtils.getCallArg(methodCall, i, frame), originalStoreInstruction));
     }
 
     private boolean loadedValueTracesToStore(SourceValue value, AbstractInsnNode originalStoreInstruction) {
         return value.insns.stream().anyMatch(insn -> {
-            if (insn.getOpcode() !=  ALOAD) {
+            if (insn.getOpcode() != ALOAD) {
                 return false;
             }
 
