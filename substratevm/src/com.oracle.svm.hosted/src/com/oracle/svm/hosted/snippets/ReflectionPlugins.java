@@ -60,6 +60,7 @@ import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.annotate.ConstantTags;
 import com.oracle.svm.core.feature.AutomaticallyRegisteredFeature;
 import com.oracle.svm.core.feature.InternalFeature;
+import com.oracle.svm.core.reflect.proxy.DynamicProxySupport;
 import com.oracle.svm.core.util.UserError;
 import com.oracle.svm.hosted.FeatureImpl;
 import com.oracle.svm.util.LogUtils;
@@ -67,6 +68,7 @@ import jdk.graal.compiler.util.json.JsonBuilder;
 import jdk.graal.compiler.util.json.JsonPrettyWriter;
 import jdk.graal.compiler.util.json.JsonWriter;
 import org.graalvm.nativeimage.ImageSingletons;
+import org.graalvm.nativeimage.c.type.CTypeConversion;
 import org.graalvm.nativeimage.hosted.RuntimeReflection;
 import org.graalvm.nativeimage.impl.RuntimeClassInitializationSupport;
 
@@ -863,7 +865,7 @@ final class ReflectionPluginsTracingFeature implements InternalFeature {
     }
 
     private static final Queue<TraceEntry> log = new ConcurrentLinkedQueue<>();
-    private static final Set<String> strictModeTargets = Arrays.stream(ConstantTags.class.getDeclaredMethods()).map(Method::getName).collect(Collectors.toUnmodifiableSet());
+    private static final Set<String> strictModeTargets = ConstantTags.TAG_TO_ORIGINAL_MAPPING.keySet().stream().map(Method::getName).collect(Collectors.toUnmodifiableSet());
 
     private ImageClassLoader imageClassLoader;
     private ReflectionPluginLogSupport logger;
@@ -900,10 +902,13 @@ final class ReflectionPluginsTracingFeature implements InternalFeature {
 
     /**
      * Checks if the entry was created in a user provided class (class loaded by
-     * NativeImageClassLoader).
+     * NativeImageClassLoader, ignoring proxy classes).
      */
     private boolean isUserProvided(TraceEntry entry) {
         String className = entry.callStack.getFirst().getClassName();
+        if (DynamicProxySupport.PROXY_CLASS_NAME_PATTERN.matcher(className).matches()) {
+            return false;
+        }
         TypeResult<Class<?>> clazz = imageClassLoader.findClass(className);
         if (!clazz.isPresent()) {
             return false;
