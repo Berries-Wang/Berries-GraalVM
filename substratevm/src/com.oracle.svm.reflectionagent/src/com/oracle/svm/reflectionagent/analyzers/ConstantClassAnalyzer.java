@@ -48,7 +48,7 @@ public class ConstantClassAnalyzer extends ConstantValueAnalyzer {
         return switch (sourceInstruction.getOpcode()) {
             case LDC -> {
                 LdcInsnNode ldc = (LdcInsnNode) sourceInstruction;
-                yield  ldc.cst instanceof Type type && (type.getSort() == Type.OBJECT || type.getSort() == Type.ARRAY);
+                yield ldc.cst instanceof Type type && (type.getSort() == Type.OBJECT || type.getSort() == Type.ARRAY);
             }
             case GETSTATIC -> {
                 FieldInsnNode field = (FieldInsnNode) sourceInstruction;
@@ -64,8 +64,7 @@ public class ConstantClassAnalyzer extends ConstantValueAnalyzer {
         }
 
         return switch (field.owner) {
-            case "java/lang/Byte", "java/lang/Char", "java/lang/Short", "java/lang/Integer", "java/lang/Long",
-                 "java/lang/Float", "java/lang/Double", "java/lang/Void" -> true;
+            case "java/lang/Byte", "java/lang/Char", "java/lang/Short", "java/lang/Integer", "java/lang/Long", "java/lang/Float", "java/lang/Double", "java/lang/Void" -> true;
             default -> false;
         };
     }

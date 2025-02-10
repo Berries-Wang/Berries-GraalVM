@@ -106,8 +106,8 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
     }
 
     private static final CEntryPointLiteral<CFunctionPointer> ON_CLASS_FILE_LOAD_HOOK = CEntryPointLiteral.create(NativeImageReflectionAgent.class, "onClassFileLoadHook",
-                JvmtiEnv.class, JNIEnvironment.class, JNIObjectHandle.class, JNIObjectHandle.class, CCharPointer.class, JNIObjectHandle.class, int.class, CCharPointer.class, CIntPointer.class,
-                CCharPointerPointer.class);
+                    JvmtiEnv.class, JNIEnvironment.class, JNIObjectHandle.class, JNIObjectHandle.class, CCharPointer.class, JNIObjectHandle.class, int.class, CCharPointer.class, CIntPointer.class,
+                    CCharPointerPointer.class);
 
     @Override
     protected JNIHandleSet constructJavaHandles(JNIEnvironment env) {
@@ -129,8 +129,8 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
     @CEntryPointOptions(prologue = AgentIsolate.Prologue.class)
     @SuppressWarnings("unused")
     private static void onClassFileLoadHook(JvmtiEnv jvmti, JNIEnvironment jni, JNIObjectHandle classBeingRedefined,
-                                            JNIObjectHandle loader, CCharPointer name, JNIObjectHandle protectionDomain, int classDataLen, CCharPointer classData,
-                                            CIntPointer newClassDataLen, CCharPointerPointer newClassData) {
+                    JNIObjectHandle loader, CCharPointer name, JNIObjectHandle protectionDomain, int classDataLen, CCharPointer classData,
+                    CIntPointer newClassDataLen, CCharPointerPointer newClassData) {
         if (shouldIgnoreClassLoader(jni, loader)) {
             return;
         }
@@ -154,9 +154,9 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
     }
 
     /**
-     * We're only interested in analyzing and instrumenting user provided classes,
-     * so we're handling that by checking which class loader the class was loaded by.
-     * In case a class was loaded by a builtin class loader, we ignore it.
+     * We're only interested in analyzing and instrumenting user provided classes, so we're handling
+     * that by checking which class loader the class was loaded by. In case a class was loaded by a
+     * builtin class loader, we ignore it.
      */
     private static boolean shouldIgnoreClassLoader(JNIEnvironment jni, JNIObjectHandle loader) {
         NativeImageReflectionAgent agent = singleton();
@@ -165,10 +165,10 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
         JNIObjectHandle jdkInternalReflectDelegatingClassLoader = agent.handles().jdkInternalReflectDelegatingClassLoader;
 
         return loader.equal(nullHandle()) // Bootstrap class loader
-                || jniFunctions().getIsSameObject().invoke(jni, loader, agent.handles().systemClassLoader)
-                || !platformClassLoader.equal(nullHandle()) && jniFunctions().getIsSameObject().invoke(jni, loader, platformClassLoader)
-                || !builtinAppClassLoader.equal(nullHandle()) && jniFunctions().getIsSameObject().invoke(jni, loader, builtinAppClassLoader)
-                || !jdkInternalReflectDelegatingClassLoader.equal(nullHandle()) && jniFunctions().getIsInstanceOf().invoke(jni, loader, jdkInternalReflectDelegatingClassLoader);
+                        || jniFunctions().getIsSameObject().invoke(jni, loader, agent.handles().systemClassLoader) ||
+                        !platformClassLoader.equal(nullHandle()) && jniFunctions().getIsSameObject().invoke(jni, loader, platformClassLoader) ||
+                        !builtinAppClassLoader.equal(nullHandle()) && jniFunctions().getIsSameObject().invoke(jni, loader, builtinAppClassLoader) ||
+                        !jdkInternalReflectDelegatingClassLoader.equal(nullHandle()) && jniFunctions().getIsInstanceOf().invoke(jni, loader, jdkInternalReflectDelegatingClassLoader);
     }
 
     private static byte[] instrumentClass(byte[] classData) throws AnalyzerException {
@@ -193,11 +193,10 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
         Set<MethodInsnNode> constantCalls = new HashSet<>();
 
         AnalyzerSuite analyzerSuite = new AnalyzerSuite(
-                new ConstantStringAnalyzer(instructions, frames, constantCalls),
-                new ConstantBooleanAnalyzer(instructions, frames, constantCalls),
-                new ConstantClassAnalyzer(instructions, frames, constantCalls),
-                new ConstantArrayAnalyzer(instructions, frames, REFLECTIVE_CALL_HANDLERS.keySet(), new ConstantClassAnalyzer(instructions, frames, constantCalls))
-        );
+                        new ConstantStringAnalyzer(instructions, frames, constantCalls),
+                        new ConstantBooleanAnalyzer(instructions, frames, constantCalls),
+                        new ConstantClassAnalyzer(instructions, frames, constantCalls),
+                        new ConstantArrayAnalyzer(instructions, frames, REFLECTIVE_CALL_HANDLERS.keySet(), new ConstantClassAnalyzer(instructions, frames, constantCalls)));
 
         for (int i = 0; i < instructions.length; i++) {
             if (instructions[i] instanceof MethodInsnNode methodCall) {
@@ -224,24 +223,24 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
     }
 
     private static boolean isForName3Constant(AnalyzerSuite analyzers, CallContext callContext) {
-        return analyzers.stringAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame))
-                && analyzers.booleanAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 1, callContext.frame));
+        return analyzers.stringAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame)) &&
+                        analyzers.booleanAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 1, callContext.frame));
     }
 
     private static boolean isFieldQueryConstant(AnalyzerSuite analyzers, CallContext callContext) {
-        return analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame))
-                && analyzers.stringAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 1, callContext.frame));
+        return analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame)) &&
+                        analyzers.stringAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 1, callContext.frame));
     }
 
     private static boolean isConstructorQueryConstant(AnalyzerSuite analyzers, CallContext callContext) {
-        return analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame))
-                && analyzers.classArrayAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 1, callContext.frame), callContext.call);
+        return analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame)) &&
+                        analyzers.classArrayAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 1, callContext.frame), callContext.call);
     }
 
     private static boolean isMethodQueryConstant(AnalyzerSuite analyzers, CallContext callContext) {
-        return analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame))
-                && analyzers.stringAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 1, callContext.frame))
-                && analyzers.classArrayAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 2, callContext.frame), callContext.call);
+        return analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame)) &&
+                        analyzers.stringAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 1, callContext.frame)) &&
+                        analyzers.classArrayAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 2, callContext.frame), callContext.call);
     }
 
     record CallContext(MethodInsnNode call, Frame<SourceValue> frame) {
@@ -249,7 +248,7 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
     }
 
     record AnalyzerSuite(ConstantStringAnalyzer stringAnalyzer, ConstantBooleanAnalyzer booleanAnalyzer,
-                         ConstantClassAnalyzer classAnalyzer, ConstantArrayAnalyzer classArrayAnalyzer) {
+                    ConstantClassAnalyzer classAnalyzer, ConstantArrayAnalyzer classArrayAnalyzer) {
 
     }
 

@@ -890,9 +890,9 @@ final class ReflectionPluginsTracingFeature implements InternalFeature {
                 log.stream().filter(ReflectionPluginsTracingFeature::isUserProvided)
                             .filter(ReflectionPluginsTracingFeature::missedByStrictMode)
                             .forEach(entry -> LogUtils.warning(entry +
-                                " outside of the strict constant reflection mode." +
-                                " Consider adding the appropriate entry to your reachability metadata" +
-                                " (https://www.graalvm.org/latest/reference-manual/native-image/metadata/#reflection)."));
+                                            " outside of the strict constant reflection mode." +
+                                            " Consider adding the appropriate entry to your reachability metadata" +
+                                            " (https://www.graalvm.org/latest/reference-manual/native-image/metadata/#reflection)."));
             }
         }
     }
@@ -913,7 +913,7 @@ final class ReflectionPluginsTracingFeature implements InternalFeature {
 
     private static boolean missedByStrictMode(TraceEntry entry) {
         return entry.targetMethod.getDeclaringClass().toJavaName(true).equals("java.lang.Class") &&
-                strictModeTargets.contains(entry.targetMethod.getName());
+                        strictModeTargets.contains(entry.targetMethod.getName());
     }
 
     public static boolean isEnabled() {
@@ -945,12 +945,12 @@ final class ReflectionPluginsTracingFeature implements InternalFeature {
         @Override
         public String toString() {
             String targetArgumentsString = Stream.of(targetArguments)
-                        .map(arg -> arg instanceof Object[] ? Arrays.toString((Object[]) arg) : Objects.toString(arg)).collect(Collectors.joining(", "));
+                            .map(arg -> arg instanceof Object[] ? Arrays.toString((Object[]) arg) : Objects.toString(arg)).collect(Collectors.joining(", "));
 
             return "Call to " + targetMethod.format("%H.%n(%p)") +
-                        " reached in " + callStack.getFirst() +
-                        (targetCaller != null ? " with caller " + targetCaller + " and" : "") +
-                        " with arguments (" + targetArgumentsString + ") was reduced";
+                            " reached in " + callStack.getFirst() +
+                            (targetCaller != null ? " with caller " + targetCaller + " and" : "") +
+                            " with arguments (" + targetArgumentsString + ") was reduced";
         }
 
         public void toJson(JsonBuilder.ObjectBuilder builder) throws IOException {
