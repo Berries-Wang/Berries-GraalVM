@@ -77,13 +77,28 @@ import static com.oracle.svm.jvmtiagentbase.Support.jniFunctions;
 import static com.oracle.svm.jvmtiagentbase.jvmti.JvmtiEvent.JVMTI_EVENT_CLASS_FILE_LOAD_HOOK;
 import static jdk.internal.org.objectweb.asm.Opcodes.INVOKESTATIC;
 
+/**
+ * A JVMTI agent which analyzes user provided classes and tags reflective method calls
+ * which can be proven constant.
+ * <p>
+ * This way of marking reflective calls as constant decouples the analysis and image runtime behaviour
+ * w.r.t. reflection from various optimizations executed on IR graphs.
+ */
 @SuppressWarnings("unused")
 public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflectionAgentJNIHandleSet> {
 
     private static final Class<?> CONSTANT_TAGS_CLASS = ConstantTags.class;
 
     private static final Map<MethodCallUtils.Signature, BiPredicate<AnalyzerSuite, CallContext>> REFLECTIVE_CALL_HANDLERS = createReflectiveCallHandlers();
+    private static final Map<MethodCallUtils.Signature, BiPredicate<AnalyzerSuite, CallContext>> NON_REFLECTIVE_CALL_HANDLERS = createNonReflectiveCallHandlers();
 
+    /**
+     * Defines the reflective methods (which can potentially throw a {@link org.graalvm.nativeimage.MissingReflectionRegistrationError})
+     * which we want to tag for folding in {@link com.oracle.svm.hosted.snippets.ReflectionPlugins}.
+     * <p>
+     * If proven as constant by our analysis, calls to these methods will be tagged by redirecting their owner
+     * to {@link com.oracle.svm.core.annotate.ConstantTags} (making them static invocations in the process if necessary).
+     */
     private static Map<MethodCallUtils.Signature, BiPredicate<AnalyzerSuite, CallContext>> createReflectiveCallHandlers() {
         Map<MethodCallUtils.Signature, BiPredicate<AnalyzerSuite, CallContext>> callHandlers = new HashMap<>();
         callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "forName", "(Ljava/lang/String;)Ljava/lang/Class;"),
@@ -102,6 +117,15 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
                         NativeImageReflectionAgent::isMethodQueryConstant);
         callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredMethod", "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;"),
                         NativeImageReflectionAgent::isMethodQueryConstant);
+        return callHandlers;
+    }
+
+    /**
+     * Defines methods which we still need to track, but not tag with {@link com.oracle.svm.core.annotate.ConstantTags}.
+     * An example of this are various methods for {@link java.lang.invoke.MethodType} construction.
+     */
+    private static Map<MethodCallUtils.Signature, BiPredicate<AnalyzerSuite, CallContext>> createNonReflectiveCallHandlers() {
+        Map<MethodCallUtils.Signature, BiPredicate<AnalyzerSuite, CallContext>> callHandlers = new HashMap<>();
         return callHandlers;
     }
 
@@ -201,13 +225,18 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
         for (int i = 0; i < instructions.length; i++) {
             if (instructions[i] instanceof MethodInsnNode methodCall) {
                 BiPredicate<AnalyzerSuite, CallContext> handler = REFLECTIVE_CALL_HANDLERS.get(new MethodCallUtils.Signature(methodCall));
+                if (handler == null) {
+                    handler = NON_REFLECTIVE_CALL_HANDLERS.get(new MethodCallUtils.Signature(methodCall));
+                }
                 if (handler != null && handler.test(analyzerSuite, new CallContext(methodCall, frames[i]))) {
                     constantCalls.add(methodCall);
                 }
             }
         }
 
-        constantCalls.forEach(NativeImageReflectionAgent::tagAsConstant);
+        constantCalls.stream()
+                        .filter(cc -> REFLECTIVE_CALL_HANDLERS.containsKey(new MethodCallUtils.Signature(cc)))
+                        .forEach(NativeImageReflectionAgent::tagAsConstant);
     }
 
     private static void tagAsConstant(MethodInsnNode methodCall) {
