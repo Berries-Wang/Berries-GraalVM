@@ -765,7 +765,8 @@ public final class ReflectionPlugins {
         return intrinsicConstant;
     }
 
-    private boolean throwException(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Class<? extends Throwable> exceptionClass, String originalMessage) {
+    private boolean throwException(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Object targetCaller, Object[] targetArguments, Class<? extends Throwable> exceptionClass,
+                    String originalMessage) {
         /* Get the exception throwing method that has a message parameter. */
         Method exceptionMethod = ExceptionSynthesizer.throwExceptionMethodOrNull(exceptionClass, String.class);
         if (exceptionMethod == null) {
@@ -888,11 +889,11 @@ final class ReflectionPluginsTracingFeature implements InternalFeature {
             }
             if (SubstrateOptions.EnableStrictReflection.getValue()) {
                 log.stream().filter(ReflectionPluginsTracingFeature::isUserProvided)
-                            .filter(ReflectionPluginsTracingFeature::missedByStrictMode)
-                            .forEach(entry -> LogUtils.warning(entry +
-                                            " outside of the strict constant reflection mode." +
-                                            " Consider adding the appropriate entry to your reachability metadata" +
-                                            " (https://www.graalvm.org/latest/reference-manual/native-image/metadata/#reflection)."));
+                                .filter(ReflectionPluginsTracingFeature::missedByStrictMode)
+                                .forEach(entry -> LogUtils.warning(entry +
+                                                " outside of the strict constant reflection mode." +
+                                                " Consider adding the appropriate entry to your reachability metadata" +
+                                                " (https://www.graalvm.org/latest/reference-manual/native-image/metadata/#reflection)."));
             }
         }
     }

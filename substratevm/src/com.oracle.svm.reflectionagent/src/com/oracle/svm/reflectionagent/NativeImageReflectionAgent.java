@@ -189,7 +189,7 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
         AbstractInsnNode[] instructions = methodNode.instructions.toArray();
         @SuppressWarnings("unchecked")
         ControlFlowGraphNode<SourceValue>[] frames = Arrays.stream(analyzer.analyze(classNode.name, methodNode))
-                .map(frame -> (ControlFlowGraphNode<SourceValue>) frame).toArray(ControlFlowGraphNode[]::new);
+                        .map(frame -> (ControlFlowGraphNode<SourceValue>) frame).toArray(ControlFlowGraphNode[]::new);
         Set<MethodInsnNode> constantCalls = new HashSet<>();
 
         AnalyzerSuite analyzerSuite = new AnalyzerSuite(
