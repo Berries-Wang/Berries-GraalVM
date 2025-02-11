@@ -25,7 +25,6 @@
 package com.oracle.svm.reflectionagent;
 
 import com.oracle.svm.configure.trace.AccessAdvisor;
-import com.oracle.svm.core.annotate.ConstantTags;
 import com.oracle.svm.core.c.function.CEntryPointOptions;
 import com.oracle.svm.core.jni.headers.JNIEnvironment;
 import com.oracle.svm.core.jni.headers.JNIJavaVM;
@@ -63,6 +62,7 @@ import org.graalvm.nativeimage.c.type.CCharPointerPointer;
 import org.graalvm.nativeimage.c.type.CIntPointer;
 import org.graalvm.nativeimage.c.type.CTypeConversion;
 import org.graalvm.nativeimage.hosted.Feature;
+import org.graalvm.nativeimage.impl.reflectiontags.ConstantTags;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -98,7 +98,7 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
      * folding in {@link com.oracle.svm.hosted.snippets.ReflectionPlugins}.
      * <p>
      * If proven as constant by our analysis, calls to these methods will be tagged by redirecting
-     * their owner to {@link com.oracle.svm.core.annotate.ConstantTags} (making them static
+     * their owner to {@link org.graalvm.nativeimage.impl.reflectiontags.ConstantTags} (making them static
      * invocations in the process if necessary).
      */
     private static Map<MethodCallUtils.Signature, BiPredicate<AnalyzerSuite, CallContext>> createReflectiveCallHandlers() {
@@ -148,7 +148,7 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
 
     /**
      * Defines methods which we still need to track, but not tag with
-     * {@link com.oracle.svm.core.annotate.ConstantTags}. An example of this are various methods for
+     * {@link org.graalvm.nativeimage.impl.reflectiontags.ConstantTags}. An example of this are various methods for
      * {@link java.lang.invoke.MethodType} construction.
      */
     private static Map<MethodCallUtils.Signature, BiPredicate<AnalyzerSuite, CallContext>> createNonReflectiveCallHandlers() {

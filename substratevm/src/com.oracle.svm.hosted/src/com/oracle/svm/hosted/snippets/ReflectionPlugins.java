@@ -57,7 +57,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import com.oracle.svm.core.SubstrateOptions;
-import com.oracle.svm.core.annotate.ConstantTags;
 import com.oracle.svm.core.feature.AutomaticallyRegisteredFeature;
 import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.reflect.proxy.DynamicProxySupport;
@@ -108,6 +107,7 @@ import jdk.vm.ci.meta.MetaAccessProvider;
 import jdk.vm.ci.meta.ResolvedJavaField;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 import jdk.vm.ci.meta.ResolvedJavaType;
+import org.graalvm.nativeimage.impl.reflectiontags.ConstantTags;
 
 /**
  * Performs constant folding of methods that perform reflection lookups when all arguments are

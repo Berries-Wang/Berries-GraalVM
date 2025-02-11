@@ -38,7 +38,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.oracle.svm.core.annotate;
+package org.graalvm.nativeimage.impl.reflectiontags;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
