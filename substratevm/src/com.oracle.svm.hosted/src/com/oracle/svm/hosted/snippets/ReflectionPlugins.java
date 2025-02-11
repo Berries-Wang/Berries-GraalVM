@@ -835,20 +835,54 @@ public final class ReflectionPlugins {
         }
 
         public void registerStrictModePlugins(InvocationPlugins plugins) {
-            Registration r = new Registration(plugins, ConstantTags.class);
-            r.register(new RequiredInvocationPlugin("forName", String.class) {
+            plugins.register(ConstantTags.class, new RequiredInvocationPlugin("forName", String.class) {
                 @Override
                 public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode nameNode) {
                     return processClassForName(b, targetMethod, nameNode, ConstantNode.forBoolean(true));
                 }
             });
-            r.register(new RequiredInvocationPlugin("forName", String.class, boolean.class, ClassLoader.class) {
+
+            plugins.register(ConstantTags.class, new RequiredInvocationPlugin("forName", String.class, boolean.class, ClassLoader.class) {
                 @Override
                 public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode nameNode, ValueNode initializeNode, ValueNode classLoaderNode) {
                     return processClassForName(b, targetMethod, nameNode, initializeNode);
                 }
             });
+
             registerFoldInvocationPlugins(plugins, ConstantTags.class, "getField", "getDeclaredField", "getConstructor", "getDeclaredConstructor", "getMethod", "getDeclaredMethod");
+
+            registerStrictBulkQuery(plugins, ConstantTags.class, "getFields", RuntimeReflection::registerAllFields);
+            registerStrictBulkQuery(plugins, ConstantTags.class, "getDeclaredFields", RuntimeReflection::registerAllDeclaredFields);
+            registerStrictBulkQuery(plugins, ConstantTags.class, "getConstructors", RuntimeReflection::registerAllConstructors);
+            registerStrictBulkQuery(plugins, ConstantTags.class, "getDeclaredConstructors", RuntimeReflection::registerAllDeclaredConstructors);
+            registerStrictBulkQuery(plugins, ConstantTags.class, "getMethods", RuntimeReflection::registerAllMethods);
+            registerStrictBulkQuery(plugins, ConstantTags.class, "getDeclaredMethods", RuntimeReflection::registerAllDeclaredMethods);
+            registerStrictBulkQuery(plugins, ConstantTags.class, "getClasses", RuntimeReflection::registerAllClasses);
+            registerStrictBulkQuery(plugins, ConstantTags.class, "getDeclaredClasses", RuntimeReflection::registerAllDeclaredClasses);
+            registerStrictBulkQuery(plugins, ConstantTags.class, "getNestMembers", RuntimeReflection::registerAllNestMembers);
+            registerStrictBulkQuery(plugins, ConstantTags.class, "getPermittedSubclasses", RuntimeReflection::registerAllPermittedSubclasses);
+            registerStrictBulkQuery(plugins, ConstantTags.class, "getRecordComponents", RuntimeReflection::registerAllRecordComponents);
+            registerStrictBulkQuery(plugins, ConstantTags.class, "getSigners", RuntimeReflection::registerAllSigners);
+        }
+
+        private void registerStrictBulkQuery(InvocationPlugins plugins, Class<?> clazz, String methodName, Consumer<Class<?>> registrationCallback) {
+            plugins.register(clazz, new RequiredInvocationPlugin(methodName, Class.class) {
+                @Override
+                public boolean isDecorator() {
+                    return true;
+                }
+
+                @Override
+                public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode clazzNode) {
+                    Object clazzValue = unbox(b, clazzNode, JavaKind.Object);
+                    if (!(clazzValue instanceof Class<?>)) {
+                        return false;
+                    }
+                    b.add(ReachabilityRegistrationNode.create(() -> registerForRuntimeReflection((Class<?>) clazzValue, registrationCallback), reason));
+                    traceConstant(b, targetMethod, null, new Object[]{clazzValue}, new Object[]{});
+                    return true;
+                }
+            });
         }
     }
 }

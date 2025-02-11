@@ -119,6 +119,30 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
                         NativeImageReflectionAgent::isMethodQueryConstant);
         callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredMethod", "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;"),
                         NativeImageReflectionAgent::isMethodQueryConstant);
+        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getFields", "()[Ljava/lang/reflect/Field;"),
+                        NativeImageReflectionAgent::isBulkQueryConstant);
+        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredFields", "()[Ljava/lang/reflect/Field;"),
+                        NativeImageReflectionAgent::isBulkQueryConstant);
+        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getConstructors", "()[Ljava/lang/reflect/Constructor;"),
+                        NativeImageReflectionAgent::isBulkQueryConstant);
+        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredConstructors", "()[Ljava/lang/reflect/Constructor;"),
+                        NativeImageReflectionAgent::isBulkQueryConstant);
+        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getMethods", "()[Ljava/lang/reflect/Method;"),
+                        NativeImageReflectionAgent::isBulkQueryConstant);
+        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredMethods", "()[Ljava/lang/reflect/Method;"),
+                        NativeImageReflectionAgent::isBulkQueryConstant);
+        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getClasses", "()[Ljava/lang/Class;"),
+                        NativeImageReflectionAgent::isBulkQueryConstant);
+        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredClasses", "()[Ljava/lang/Class;"),
+                        NativeImageReflectionAgent::isBulkQueryConstant);
+        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getNestMembers", "()[Ljava/lang/Class;"),
+                        NativeImageReflectionAgent::isBulkQueryConstant);
+        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getPermittedSubclasses", "()[Ljava/lang/Class;"),
+                        NativeImageReflectionAgent::isBulkQueryConstant);
+        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getRecordComponents", "()[Ljava/lang/reflect/RecordComponent;"),
+                        NativeImageReflectionAgent::isBulkQueryConstant);
+        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getSigners", "()[Ljava/lang/Object;"),
+                        NativeImageReflectionAgent::isBulkQueryConstant);
         return callHandlers;
     }
 
@@ -219,11 +243,14 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
                         .map(frame -> (ControlFlowGraphNode<SourceValue>) frame).toArray(ControlFlowGraphNode[]::new);
         Set<MethodInsnNode> constantCalls = new HashSet<>();
 
+        Set<MethodCallUtils.Signature> allCalls = new HashSet<>(REFLECTIVE_CALL_HANDLERS.keySet());
+        allCalls.addAll(NON_REFLECTIVE_CALL_HANDLERS.keySet());
+
         AnalyzerSuite analyzerSuite = new AnalyzerSuite(
                         new ConstantStringAnalyzer(instructions, frames, constantCalls),
                         new ConstantBooleanAnalyzer(instructions, frames, constantCalls),
                         new ConstantClassAnalyzer(instructions, frames, constantCalls),
-                        new ConstantArrayAnalyzer(instructions, frames, REFLECTIVE_CALL_HANDLERS.keySet(), new ConstantClassAnalyzer(instructions, frames, constantCalls)));
+                        new ConstantArrayAnalyzer(instructions, frames, allCalls, new ConstantClassAnalyzer(instructions, frames, constantCalls)));
 
         for (int i = 0; i < instructions.length; i++) {
             if (instructions[i] instanceof MethodInsnNode methodCall) {
@@ -273,6 +300,10 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
         return analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame)) &&
                         analyzers.stringAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 1, callContext.frame)) &&
                         analyzers.classArrayAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 2, callContext.frame), callContext.call);
+    }
+
+    private static boolean isBulkQueryConstant(AnalyzerSuite analyzers, CallContext callContext) {
+        return analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame));
     }
 
     record CallContext(MethodInsnNode call, Frame<SourceValue> frame) {

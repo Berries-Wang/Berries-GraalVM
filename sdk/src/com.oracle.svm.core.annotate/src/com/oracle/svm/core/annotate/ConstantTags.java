@@ -43,6 +43,7 @@ package com.oracle.svm.core.annotate;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.RecordComponent;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -69,6 +70,18 @@ public final class ConstantTags {
             mapping.put(ConstantTags.class.getDeclaredMethod("getDeclaredConstructor", Class.class, Class[].class), Class.class.getDeclaredMethod("getDeclaredConstructor", Class[].class));
             mapping.put(ConstantTags.class.getDeclaredMethod("getMethod", Class.class, String.class, Class[].class), Class.class.getDeclaredMethod("getMethod", String.class, Class[].class));
             mapping.put(ConstantTags.class.getDeclaredMethod("getDeclaredMethod", Class.class, String.class, Class[].class), Class.class.getDeclaredMethod("getDeclaredMethod", String.class, Class[].class));
+            mapping.put(ConstantTags.class.getDeclaredMethod("getFields", Class.class), Class.class.getDeclaredMethod("getFields"));
+            mapping.put(ConstantTags.class.getDeclaredMethod("getDeclaredFields", Class.class), Class.class.getDeclaredMethod("getDeclaredFields"));
+            mapping.put(ConstantTags.class.getDeclaredMethod("getConstructors", Class.class), Class.class.getDeclaredMethod("getConstructors"));
+            mapping.put(ConstantTags.class.getDeclaredMethod("getDeclaredConstructors", Class.class), Class.class.getDeclaredMethod("getDeclaredConstructors"));
+            mapping.put(ConstantTags.class.getDeclaredMethod("getMethods", Class.class), Class.class.getDeclaredMethod("getMethods"));
+            mapping.put(ConstantTags.class.getDeclaredMethod("getDeclaredMethods", Class.class), Class.class.getDeclaredMethod("getDeclaredMethods"));
+            mapping.put(ConstantTags.class.getDeclaredMethod("getClasses", Class.class), Class.class.getDeclaredMethod("getClasses"));
+            mapping.put(ConstantTags.class.getDeclaredMethod("getDeclaredClasses", Class.class), Class.class.getDeclaredMethod("getDeclaredClasses"));
+            mapping.put(ConstantTags.class.getDeclaredMethod("getNestMembers", Class.class), Class.class.getDeclaredMethod("getNestMembers"));
+            mapping.put(ConstantTags.class.getDeclaredMethod("getPermittedSubclasses", Class.class), Class.class.getDeclaredMethod("getPermittedSubclasses"));
+            mapping.put(ConstantTags.class.getDeclaredMethod("getRecordComponents", Class.class), Class.class.getDeclaredMethod("getRecordComponents"));
+            mapping.put(ConstantTags.class.getDeclaredMethod("getSigners", Class.class), Class.class.getDeclaredMethod("getSigners"));
         } catch (NoSuchMethodException e) {
             throw new RuntimeException(e);
         }
@@ -107,5 +120,53 @@ public final class ConstantTags {
 
     public static Method getDeclaredMethod(Class<?> clazz, String methodName, Class<?>... parameterTypes) throws NoSuchMethodException {
         return clazz.getDeclaredMethod(methodName, parameterTypes);
+    }
+
+    public static Field[] getFields(Class<?> clazz) {
+        return clazz.getFields();
+    }
+
+    public static Field[] getDeclaredFields(Class<?> clazz) {
+        return clazz.getDeclaredFields();
+    }
+
+    public static Constructor<?>[] getConstructors(Class<?> clazz) {
+        return clazz.getConstructors();
+    }
+
+    public static Constructor<?>[] getDeclaredConstructors(Class<?> clazz) {
+        return clazz.getDeclaredConstructors();
+    }
+
+    public static Method[] getMethods(Class<?> clazz) {
+        return clazz.getMethods();
+    }
+
+    public static Method[] getDeclaredMethods(Class<?> clazz) {
+        return clazz.getDeclaredMethods();
+    }
+
+    public static Class<?>[] getClasses(Class<?> clazz) {
+        return clazz.getClasses();
+    }
+
+    public static Class<?>[] getDeclaredClasses(Class<?> clazz) {
+        return clazz.getDeclaredClasses();
+    }
+
+    public static Class<?>[] getNestMembers(Class<?> clazz) {
+        return clazz.getNestMembers();
+    }
+
+    public static Class<?>[] getPermittedSubclasses(Class<?> clazz) {
+        return clazz.getPermittedSubclasses();
+    }
+
+    public static RecordComponent[] getRecordComponents(Class<?> clazz) {
+        return clazz.getRecordComponents();
+    }
+
+    public static Object[] getSigners(Class<?> clazz) {
+        return clazz.getSigners();
     }
 }
