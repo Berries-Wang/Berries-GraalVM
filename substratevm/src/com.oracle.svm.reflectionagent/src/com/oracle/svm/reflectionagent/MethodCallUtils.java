@@ -29,6 +29,9 @@ import jdk.internal.org.objectweb.asm.tree.MethodInsnNode;
 import jdk.internal.org.objectweb.asm.tree.analysis.Frame;
 import jdk.internal.org.objectweb.asm.tree.analysis.SourceValue;
 
+import java.util.Arrays;
+import java.util.stream.Collectors;
+
 import static jdk.internal.org.objectweb.asm.Opcodes.INVOKESTATIC;
 
 public final class MethodCallUtils {
@@ -41,6 +44,14 @@ public final class MethodCallUtils {
 
         public Signature(MethodInsnNode methodCall) {
             this(methodCall.owner, methodCall.name, methodCall.desc);
+        }
+
+        public Signature(Class<?> owner, String name, Class<?> returnType, Class<?>... parameterTypes) {
+            this(Type.getInternalName(owner), name, buildDescriptor(returnType, parameterTypes));
+        }
+
+        private static String buildDescriptor(Class<?> returnType, Class<?>... parameterTypes) {
+            return "(" + Arrays.stream(parameterTypes).map(Type::getDescriptor).collect(Collectors.joining()) + ")" + Type.getDescriptor(returnType);
         }
     }
 

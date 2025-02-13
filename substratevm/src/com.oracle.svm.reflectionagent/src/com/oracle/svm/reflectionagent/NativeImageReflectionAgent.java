@@ -66,6 +66,14 @@ import org.graalvm.nativeimage.c.type.CTypeConversion;
 import org.graalvm.nativeimage.hosted.Feature;
 import org.graalvm.nativeimage.impl.reflectiontags.ConstantTags;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
+import java.lang.invoke.VarHandle;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.RecordComponent;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -108,72 +116,42 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
      * invocations in the process if necessary).
      */
     private static Map<MethodCallUtils.Signature, int[]> createReflectiveCallConstantDefinitions() {
-        Map<MethodCallUtils.Signature, int[]> callHandlers = new HashMap<>();
+        Map<MethodCallUtils.Signature, int[]> definitions = new HashMap<>();
 
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "forName", "(Ljava/lang/String;)Ljava/lang/Class;"),
-                        new int[]{0});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "forName", "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;"),
-                        new int[]{0, 1});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getField", "(Ljava/lang/String;)Ljava/lang/reflect/Field;"),
-                        new int[]{0, 1});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredField", "(Ljava/lang/String;)Ljava/lang/reflect/Field;"),
-                        new int[]{0, 1});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getConstructor", "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;"),
-                        new int[]{0, 1});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredConstructor", "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;"),
-                        new int[]{0, 1});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getMethod", "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;"),
-                        new int[]{0, 1, 2});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredMethod", "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;"),
-                        new int[]{0, 1, 2});
+        definitions.put(new MethodCallUtils.Signature(Class.class, "forName", Class.class, String.class), new int[]{0});
+        definitions.put(new MethodCallUtils.Signature(Class.class, "forName", Class.class, String.class, boolean.class, ClassLoader.class), new int[]{0, 1});
+        definitions.put(new MethodCallUtils.Signature(Class.class, "getField", Field.class, String.class), new int[]{0, 1});
+        definitions.put(new MethodCallUtils.Signature(Class.class, "getDeclaredField", Field.class, String.class), new int[]{0, 1});
+        definitions.put(new MethodCallUtils.Signature(Class.class, "getConstructor", Constructor.class, Class[].class), new int[]{0, 1});
+        definitions.put(new MethodCallUtils.Signature(Class.class, "getDeclaredConstructor", Constructor.class, Class[].class), new int[]{0, 1});
+        definitions.put(new MethodCallUtils.Signature(Class.class, "getMethod", Method.class, String.class, Class[].class), new int[]{0, 1, 2});
+        definitions.put(new MethodCallUtils.Signature(Class.class, "getDeclaredMethod", Method.class, String.class, Class[].class), new int[]{0, 1, 2});
 
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getFields", "()[Ljava/lang/reflect/Field;"),
-                        new int[]{0});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredFields", "()[Ljava/lang/reflect/Field;"),
-                        new int[]{0});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getConstructors", "()[Ljava/lang/reflect/Constructor;"),
-                        new int[]{0});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredConstructors", "()[Ljava/lang/reflect/Constructor;"),
-                        new int[]{0});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getMethods", "()[Ljava/lang/reflect/Method;"),
-                        new int[]{0});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredMethods", "()[Ljava/lang/reflect/Method;"),
-                        new int[]{0});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getClasses", "()[Ljava/lang/Class;"),
-                        new int[]{0});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredClasses", "()[Ljava/lang/Class;"),
-                        new int[]{0});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getNestMembers", "()[Ljava/lang/Class;"),
-                        new int[]{0});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getPermittedSubclasses", "()[Ljava/lang/Class;"),
-                        new int[]{0});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getRecordComponents", "()[Ljava/lang/reflect/RecordComponent;"),
-                        new int[]{0});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getSigners", "()[Ljava/lang/Object;"),
-                        new int[]{0});
+        definitions.put(new MethodCallUtils.Signature(Class.class, "getFields", Field[].class), new int[]{0});
+        definitions.put(new MethodCallUtils.Signature(Class.class, "getDeclaredFields", Field[].class), new int[]{0});
+        definitions.put(new MethodCallUtils.Signature(Class.class, "getConstructors", Constructor[].class), new int[]{0});
+        definitions.put(new MethodCallUtils.Signature(Class.class, "getDeclaredConstructors", Constructor[].class), new int[]{0});
+        definitions.put(new MethodCallUtils.Signature(Class.class, "getMethods", Method[].class), new int[]{0});
+        definitions.put(new MethodCallUtils.Signature(Class.class, "getDeclaredMethods", Method[].class), new int[]{0});
+        definitions.put(new MethodCallUtils.Signature(Class.class, "getClasses", Class[].class), new int[]{0});
+        definitions.put(new MethodCallUtils.Signature(Class.class, "getDeclaredClasses", Class[].class), new int[]{0});
+        definitions.put(new MethodCallUtils.Signature(Class.class, "getNestMembers", Class[].class), new int[]{0});
+        definitions.put(new MethodCallUtils.Signature(Class.class, "getPermittedSubclasses", Class[].class), new int[]{0});
+        definitions.put(new MethodCallUtils.Signature(Class.class, "getRecordComponents", RecordComponent[].class), new int[]{0});
+        definitions.put(new MethodCallUtils.Signature(Class.class, "getSigners", Object[].class), new int[]{0});
 
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles$Lookup", "findClass", "(Ljava/lang/String;)Ljava/lang/Class;"),
-                        new int[]{0, 1});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles$Lookup", "findVirtual", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/MethodHandle;"),
-                        new int[]{0, 1, 2, 3});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles$Lookup", "findStatic", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/MethodHandle;"),
-                        new int[]{0, 1, 2, 3});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles$Lookup", "findConstructor", "(Ljava/lang/Class;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/MethodHandle;"),
-                        new int[]{0, 1, 2});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles$Lookup", "findGetter", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/invoke/MethodHandle;"),
-                        new int[]{0, 1, 2, 3});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles$Lookup", "findStaticGetter", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/invoke/MethodHandle;"),
-                        new int[]{0, 1, 2, 3});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles$Lookup", "findSetter", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/invoke/MethodHandle;"),
-                        new int[]{0, 1, 2, 3});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles$Lookup", "findStaticSetter", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/invoke/MethodHandle;"),
-                        new int[]{0, 1, 2, 3});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles$Lookup", "findVarHandle", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/invoke/VarHandle;"),
-                        new int[]{0, 1, 2, 3});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles$Lookup", "findStaticVarHandle", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/invoke/VarHandle;"),
-                        new int[]{0, 1, 2, 3});
+        definitions.put(new MethodCallUtils.Signature(MethodHandles.Lookup.class, "findClass", Class.class, String.class), new int[]{0, 1});
+        definitions.put(new MethodCallUtils.Signature(MethodHandles.Lookup.class, "findVirtual", MethodHandle.class, Class.class, String.class, MethodType.class), new int[]{0, 1, 2, 3});
+        definitions.put(new MethodCallUtils.Signature(MethodHandles.Lookup.class, "findStatic", MethodHandle.class, Class.class, String.class, MethodType.class), new int[]{0, 1, 2, 3});
+        definitions.put(new MethodCallUtils.Signature(MethodHandles.Lookup.class, "findConstructor", MethodHandle.class, Class.class, MethodType.class), new int[]{0, 1, 2});
+        definitions.put(new MethodCallUtils.Signature(MethodHandles.Lookup.class, "findGetter", MethodHandle.class, Class.class, String.class, Class.class), new int[]{0, 1, 2, 3});
+        definitions.put(new MethodCallUtils.Signature(MethodHandles.Lookup.class, "findStaticGetter", MethodHandle.class, Class.class, String.class, Class.class), new int[]{0, 1, 2, 3});
+        definitions.put(new MethodCallUtils.Signature(MethodHandles.Lookup.class, "findSetter", MethodHandle.class, Class.class, String.class, Class.class), new int[]{0, 1, 2, 3});
+        definitions.put(new MethodCallUtils.Signature(MethodHandles.Lookup.class, "findStaticSetter", MethodHandle.class, Class.class, String.class, Class.class), new int[]{0, 1, 2, 3});
+        definitions.put(new MethodCallUtils.Signature(MethodHandles.Lookup.class, "findVarHandle", VarHandle.class, Class.class, String.class, Class.class), new int[]{0, 1, 2, 3});
+        definitions.put(new MethodCallUtils.Signature(MethodHandles.Lookup.class, "findStaticVarHandle", VarHandle.class, Class.class, String.class, Class.class), new int[]{0, 1, 2, 3});
 
-        return callHandlers;
+        return definitions;
     }
 
     /**
@@ -182,25 +160,18 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
      * {@link java.lang.invoke.MethodType} construction.
      */
     private static Map<MethodCallUtils.Signature, int[]> createNonReflectiveCallConstantDefinitions() {
-        Map<MethodCallUtils.Signature, int[]> callHandlers = new HashMap<>();
+        Map<MethodCallUtils.Signature, int[]> definitions = new HashMap<>();
 
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodType", "methodType", "(Ljava/lang/Class;)Ljava/lang/invoke/MethodType;"),
-                        new int[]{0});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodType", "methodType", "(Ljava/lang/Class;Ljava/lang/Class;)Ljava/lang/invoke/MethodType;"),
-                        new int[]{0, 1});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodType", "methodType", "(Ljava/lang/Class;[Ljava/lang/Class;)Ljava/lang/invoke/MethodType;"),
-                        new int[]{0, 1});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodType", "methodType", "(Ljava/lang/Class;Ljava/lang/Class;[Ljava/lang/Class;)Ljava/lang/invoke/MethodType;"),
-                        new int[]{0, 1, 2});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodType", "methodType", "(Ljava/lang/Class;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/MethodType;"),
-                        new int[]{0, 1});
+        definitions.put(new MethodCallUtils.Signature(MethodType.class, "methodType", MethodType.class, Class.class), new int[]{0});
+        definitions.put(new MethodCallUtils.Signature(MethodType.class, "methodType", MethodType.class, Class.class, Class.class), new int[]{0, 1});
+        definitions.put(new MethodCallUtils.Signature(MethodType.class, "methodType", MethodType.class, Class.class, Class[].class), new int[]{0, 1});
+        definitions.put(new MethodCallUtils.Signature(MethodType.class, "methodType", MethodType.class, Class.class, Class.class, Class[].class), new int[]{0, 1, 2});
+        definitions.put(new MethodCallUtils.Signature(MethodType.class, "methodType", MethodType.class, Class.class, MethodType.class), new int[]{0, 1});
 
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles", "lookup", "()Ljava/lang/invoke/MethodHandles$Lookup;"),
-                        new int[]{});
-        callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles", "privateLookupIn", "(Ljava/lang/Class;Ljava/lang/invoke/MethodHandles$Lookup;)Ljava/lang/invoke/MethodHandles$Lookup;"),
-                        new int[]{0, 1});
+        definitions.put(new MethodCallUtils.Signature(MethodHandles.class, "lookup", MethodHandles.Lookup.class), new int[]{});
+        definitions.put(new MethodCallUtils.Signature(MethodHandles.class, "privateLookupIn", MethodHandles.Lookup.class, Class.class, MethodHandles.Lookup.class), new int[]{0, 1});
 
-        return callHandlers;
+        return definitions;
     }
 
     private static final CEntryPointLiteral<CFunctionPointer> ON_CLASS_FILE_LOAD_HOOK = CEntryPointLiteral.create(NativeImageReflectionAgent.class, "onClassFileLoadHook",
