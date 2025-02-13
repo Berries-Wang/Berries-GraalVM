@@ -49,4 +49,12 @@ public final class MethodCallUtils {
         int stackPos = frame.getStackSize() - numOfArgs + argIdx;
         return frame.getStack(stackPos);
     }
+
+    public static String getTypeDescOfArg(MethodInsnNode methodCall, int argIdx) {
+        if (methodCall.getOpcode() != INVOKESTATIC) {
+            return argIdx == 0 ? "L" + methodCall.owner + ";" : Type.getArgumentTypes(methodCall.desc)[argIdx - 1].getDescriptor();
+        } else {
+            return Type.getArgumentTypes(methodCall.desc)[argIdx].getDescriptor();
+        }
+    }
 }

@@ -68,4 +68,9 @@ public class ConstantClassAnalyzer extends ConstantValueAnalyzer {
             default -> false;
         };
     }
+
+    @Override
+    protected String typeDescriptor() {
+        return "Ljava/lang/Class;";
+    }
 }

@@ -311,4 +311,8 @@ public class ConstantArrayAnalyzer {
 
         return constantElements.size() == arraySize.get();
     }
+
+    public String typeDescriptor() {
+        return "[" + valueAnalyzer.typeDescriptor();
+    }
 }

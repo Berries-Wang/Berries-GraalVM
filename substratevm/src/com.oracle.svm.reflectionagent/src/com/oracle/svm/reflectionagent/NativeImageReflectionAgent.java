@@ -37,11 +37,13 @@ import com.oracle.svm.jvmtiagentbase.jvmti.JvmtiEnv;
 import com.oracle.svm.jvmtiagentbase.jvmti.JvmtiEventCallbacks;
 import com.oracle.svm.jvmtiagentbase.jvmti.JvmtiEventMode;
 import com.oracle.svm.jvmtiagentbase.jvmti.JvmtiInterface;
+import com.oracle.svm.reflectionagent.analyzers.AnalyzerSuite;
 import com.oracle.svm.reflectionagent.analyzers.ConstantArrayAnalyzer;
 import com.oracle.svm.reflectionagent.analyzers.ConstantBooleanAnalyzer;
 import com.oracle.svm.reflectionagent.analyzers.ConstantClassAnalyzer;
+import com.oracle.svm.reflectionagent.analyzers.ConstantMethodHandlesLookupAnalyzer;
+import com.oracle.svm.reflectionagent.analyzers.ConstantMethodTypeAnalyzer;
 import com.oracle.svm.reflectionagent.analyzers.ConstantStringAnalyzer;
-import com.oracle.svm.reflectionagent.analyzers.ConstantValueAnalyzer;
 import com.oracle.svm.reflectionagent.cfg.ControlFlowGraphAnalyzer;
 import com.oracle.svm.reflectionagent.cfg.ControlFlowGraphNode;
 import jdk.internal.org.objectweb.asm.ClassReader;
@@ -52,7 +54,6 @@ import jdk.internal.org.objectweb.asm.tree.MethodInsnNode;
 import jdk.internal.org.objectweb.asm.tree.MethodNode;
 import jdk.internal.org.objectweb.asm.tree.analysis.Analyzer;
 import jdk.internal.org.objectweb.asm.tree.analysis.AnalyzerException;
-import jdk.internal.org.objectweb.asm.tree.analysis.Frame;
 import jdk.internal.org.objectweb.asm.tree.analysis.SourceInterpreter;
 import jdk.internal.org.objectweb.asm.tree.analysis.SourceValue;
 import org.graalvm.nativeimage.c.function.CEntryPoint;
@@ -70,7 +71,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.BiPredicate;
 
 import static com.oracle.svm.core.jni.JNIObjectHandles.nullHandle;
 import static com.oracle.svm.jvmtiagentbase.Support.check;
@@ -90,8 +90,13 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
 
     private static final Class<?> CONSTANT_TAGS_CLASS = ConstantTags.class;
 
-    private static final Map<MethodCallUtils.Signature, BiPredicate<AnalyzerSuite, CallContext>> REFLECTIVE_CALL_HANDLERS = createReflectiveCallHandlers();
-    private static final Map<MethodCallUtils.Signature, BiPredicate<AnalyzerSuite, CallContext>> NON_REFLECTIVE_CALL_HANDLERS = createNonReflectiveCallHandlers();
+    /*
+     * Mapping from method signature to indices of arguments which must be constant
+     * in order for the call to that method to be considered constant. In case a method
+     * is not static, a 0 index corresponds to the method caller.
+     */
+    private static final Map<MethodCallUtils.Signature, int[]> REFLECTIVE_CALL_CONSTANT_DEFINITIONS = createReflectiveCallConstantDefinitions();
+    private static final Map<MethodCallUtils.Signature, int[]> NON_REFLECTIVE_CALL_CONSTANT_DEFINITIONS = createNonReflectiveCallConstantDefinitions();
 
     /**
      * Defines the reflective methods (which can potentially throw a
@@ -102,71 +107,71 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
      * their owner to {@link org.graalvm.nativeimage.impl.reflectiontags.ConstantTags} (making them static
      * invocations in the process if necessary).
      */
-    private static Map<MethodCallUtils.Signature, BiPredicate<AnalyzerSuite, CallContext>> createReflectiveCallHandlers() {
-        Map<MethodCallUtils.Signature, BiPredicate<AnalyzerSuite, CallContext>> callHandlers = new HashMap<>();
+    private static Map<MethodCallUtils.Signature, int[]> createReflectiveCallConstantDefinitions() {
+        Map<MethodCallUtils.Signature, int[]> callHandlers = new HashMap<>();
 
         callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "forName", "(Ljava/lang/String;)Ljava/lang/Class;"),
-                        NativeImageReflectionAgent::isForName1Constant);
+                        new int[]{0});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "forName", "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;"),
-                        NativeImageReflectionAgent::isForName3Constant);
+                        new int[]{0, 1});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getField", "(Ljava/lang/String;)Ljava/lang/reflect/Field;"),
-                        NativeImageReflectionAgent::isFieldQueryConstant);
+                        new int[]{0, 1});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredField", "(Ljava/lang/String;)Ljava/lang/reflect/Field;"),
-                        NativeImageReflectionAgent::isFieldQueryConstant);
+                        new int[]{0, 1});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getConstructor", "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;"),
-                        NativeImageReflectionAgent::isConstructorQueryConstant);
+                        new int[]{0, 1});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredConstructor", "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;"),
-                        NativeImageReflectionAgent::isConstructorQueryConstant);
+                        new int[]{0, 1});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getMethod", "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;"),
-                        NativeImageReflectionAgent::isMethodQueryConstant);
+                        new int[]{0, 1, 2});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredMethod", "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;"),
-                        NativeImageReflectionAgent::isMethodQueryConstant);
+                        new int[]{0, 1, 2});
 
         callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getFields", "()[Ljava/lang/reflect/Field;"),
-                        NativeImageReflectionAgent::isBulkQueryConstant);
+                        new int[]{0});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredFields", "()[Ljava/lang/reflect/Field;"),
-                        NativeImageReflectionAgent::isBulkQueryConstant);
+                        new int[]{0});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getConstructors", "()[Ljava/lang/reflect/Constructor;"),
-                        NativeImageReflectionAgent::isBulkQueryConstant);
+                        new int[]{0});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredConstructors", "()[Ljava/lang/reflect/Constructor;"),
-                        NativeImageReflectionAgent::isBulkQueryConstant);
+                        new int[]{0});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getMethods", "()[Ljava/lang/reflect/Method;"),
-                        NativeImageReflectionAgent::isBulkQueryConstant);
+                        new int[]{0});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredMethods", "()[Ljava/lang/reflect/Method;"),
-                        NativeImageReflectionAgent::isBulkQueryConstant);
+                        new int[]{0});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getClasses", "()[Ljava/lang/Class;"),
-                        NativeImageReflectionAgent::isBulkQueryConstant);
+                        new int[]{0});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getDeclaredClasses", "()[Ljava/lang/Class;"),
-                        NativeImageReflectionAgent::isBulkQueryConstant);
+                        new int[]{0});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getNestMembers", "()[Ljava/lang/Class;"),
-                        NativeImageReflectionAgent::isBulkQueryConstant);
+                        new int[]{0});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getPermittedSubclasses", "()[Ljava/lang/Class;"),
-                        NativeImageReflectionAgent::isBulkQueryConstant);
+                        new int[]{0});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getRecordComponents", "()[Ljava/lang/reflect/RecordComponent;"),
-                        NativeImageReflectionAgent::isBulkQueryConstant);
+                        new int[]{0});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/Class", "getSigners", "()[Ljava/lang/Object;"),
-                        NativeImageReflectionAgent::isBulkQueryConstant);
+                        new int[]{0});
 
         callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles$Lookup", "findClass", "(Ljava/lang/String;)Ljava/lang/Class;"),
-                        NativeImageReflectionAgent::isMethodHandleClassQueryConstant);
+                        new int[]{0, 1});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles$Lookup", "findVirtual", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/MethodHandle;"),
-                        NativeImageReflectionAgent::isMethodHandleMethodQueryConstant);
+                        new int[]{0, 1, 2, 3});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles$Lookup", "findStatic", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/MethodHandle;"),
-                        NativeImageReflectionAgent::isMethodHandleClassQueryConstant);
+                        new int[]{0, 1, 2, 3});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles$Lookup", "findConstructor", "(Ljava/lang/Class;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/MethodHandle;"),
-                        NativeImageReflectionAgent::isMethodHandleConstructorQueryConstant);
+                        new int[]{0, 1, 2});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles$Lookup", "findGetter", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/invoke/MethodHandle;"),
-                        NativeImageReflectionAgent::isMethodHandleFieldQueryConstant);
+                        new int[]{0, 1, 2, 3});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles$Lookup", "findStaticGetter", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/invoke/MethodHandle;"),
-                        NativeImageReflectionAgent::isMethodHandleFieldQueryConstant);
+                        new int[]{0, 1, 2, 3});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles$Lookup", "findSetter", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/invoke/MethodHandle;"),
-                        NativeImageReflectionAgent::isMethodHandleFieldQueryConstant);
+                        new int[]{0, 1, 2, 3});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles$Lookup", "findStaticSetter", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/invoke/MethodHandle;"),
-                        NativeImageReflectionAgent::isMethodHandleFieldQueryConstant);
+                        new int[]{0, 1, 2, 3});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles$Lookup", "findVarHandle", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/invoke/VarHandle;"),
-                        NativeImageReflectionAgent::isMethodHandleFieldQueryConstant);
+                        new int[]{0, 1, 2, 3});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles$Lookup", "findStaticVarHandle", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/invoke/VarHandle;"),
-                        NativeImageReflectionAgent::isMethodHandleFieldQueryConstant);
+                        new int[]{0, 1, 2, 3});
 
         return callHandlers;
     }
@@ -176,30 +181,24 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
      * {@link org.graalvm.nativeimage.impl.reflectiontags.ConstantTags}. An example of this are various methods for
      * {@link java.lang.invoke.MethodType} construction.
      */
-    private static Map<MethodCallUtils.Signature, BiPredicate<AnalyzerSuite, CallContext>> createNonReflectiveCallHandlers() {
-        Map<MethodCallUtils.Signature, BiPredicate<AnalyzerSuite, CallContext>> callHandlers = new HashMap<>();
+    private static Map<MethodCallUtils.Signature, int[]> createNonReflectiveCallConstantDefinitions() {
+        Map<MethodCallUtils.Signature, int[]> callHandlers = new HashMap<>();
 
         callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodType", "methodType", "(Ljava/lang/Class;)Ljava/lang/invoke/MethodType;"),
-                        (analyzers, callContext) -> analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame)));
+                        new int[]{0});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodType", "methodType", "(Ljava/lang/Class;Ljava/lang/Class;)Ljava/lang/invoke/MethodType;"),
-                        (analyzers, callContext) -> analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame)) &&
-                                                    analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 1, callContext.frame)));
+                        new int[]{0, 1});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodType", "methodType", "(Ljava/lang/Class;[Ljava/lang/Class;)Ljava/lang/invoke/MethodType;"),
-                        (analyzers, callContext) -> analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame)) &&
-                                                    analyzers.classArrayAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 1, callContext.frame), callContext.call));
+                        new int[]{0, 1});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodType", "methodType", "(Ljava/lang/Class;Ljava/lang/Class;[Ljava/lang/Class;)Ljava/lang/invoke/MethodType;"),
-                        (analyzers, callContext) -> analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame)) &&
-                                                    analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 1, callContext.frame)) &&
-                                                    analyzers.classArrayAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 2, callContext.frame), callContext.call));
+                        new int[]{0, 1, 2});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodType", "methodType", "(Ljava/lang/Class;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/MethodType;"),
-                        (analyzers, callContext) -> analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame)) &&
-                                                    analyzers.methodTypeAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 1, callContext.frame)));
+                        new int[]{0, 1});
 
         callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles", "lookup", "()Ljava/lang/invoke/MethodHandles$Lookup;"),
-                        (analyzers, callContext) -> true);
+                        new int[]{});
         callHandlers.put(new MethodCallUtils.Signature("java/lang/invoke/MethodHandles", "privateLookupIn", "(Ljava/lang/Class;Ljava/lang/invoke/MethodHandles$Lookup;)Ljava/lang/invoke/MethodHandles$Lookup;"),
-                        (analyzers, callContext) -> analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame)) &&
-                                                    analyzers.methodHandlesLookupAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 1, callContext.frame)));
+                        new int[]{0, 1});
 
         return callHandlers;
     }
@@ -291,31 +290,31 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
                         .map(frame -> (ControlFlowGraphNode<SourceValue>) frame).toArray(ControlFlowGraphNode[]::new);
         Set<MethodInsnNode> constantCalls = new HashSet<>();
 
-        Set<MethodCallUtils.Signature> allCalls = new HashSet<>(REFLECTIVE_CALL_HANDLERS.keySet());
-        allCalls.addAll(NON_REFLECTIVE_CALL_HANDLERS.keySet());
+        Set<MethodCallUtils.Signature> allCalls = new HashSet<>(REFLECTIVE_CALL_CONSTANT_DEFINITIONS.keySet());
+        allCalls.addAll(NON_REFLECTIVE_CALL_CONSTANT_DEFINITIONS.keySet());
 
-        AnalyzerSuite analyzerSuite = new AnalyzerSuite(
-                        new ConstantStringAnalyzer(instructions, frames, constantCalls),
-                        new ConstantBooleanAnalyzer(instructions, frames, constantCalls),
-                        new ConstantClassAnalyzer(instructions, frames, constantCalls),
-                        new ConstantArrayAnalyzer(instructions, frames, allCalls, new ConstantClassAnalyzer(instructions, frames, constantCalls)),
-                        new ConstantValueAnalyzer(instructions, frames, constantCalls),
-                        new ConstantValueAnalyzer(instructions, frames, constantCalls));
+        AnalyzerSuite analyzerSuite = new AnalyzerSuite();
+        analyzerSuite.registerAnalyzer(new ConstantStringAnalyzer(instructions, frames, constantCalls));
+        analyzerSuite.registerAnalyzer(new ConstantBooleanAnalyzer(instructions, frames, constantCalls));
+        analyzerSuite.registerAnalyzer(new ConstantClassAnalyzer(instructions, frames, constantCalls));
+        analyzerSuite.registerAnalyzer(new ConstantArrayAnalyzer(instructions, frames, allCalls, new ConstantClassAnalyzer(instructions, frames, constantCalls)));
+        analyzerSuite.registerAnalyzer(new ConstantMethodTypeAnalyzer(instructions, frames, constantCalls));
+        analyzerSuite.registerAnalyzer(new ConstantMethodHandlesLookupAnalyzer(instructions, frames, constantCalls));
 
         for (int i = 0; i < instructions.length; i++) {
             if (instructions[i] instanceof MethodInsnNode methodCall) {
-                BiPredicate<AnalyzerSuite, CallContext> handler = REFLECTIVE_CALL_HANDLERS.get(new MethodCallUtils.Signature(methodCall));
-                if (handler == null) {
-                    handler = NON_REFLECTIVE_CALL_HANDLERS.get(new MethodCallUtils.Signature(methodCall));
+                int[] mustBeConstantArgs = REFLECTIVE_CALL_CONSTANT_DEFINITIONS.get(new MethodCallUtils.Signature(methodCall));
+                if (mustBeConstantArgs == null) {
+                    mustBeConstantArgs = NON_REFLECTIVE_CALL_CONSTANT_DEFINITIONS.get(new MethodCallUtils.Signature(methodCall));
                 }
-                if (handler != null && handler.test(analyzerSuite, new CallContext(methodCall, frames[i]))) {
+                if (mustBeConstantArgs != null && analyzerSuite.isConstant(methodCall, frames[i], mustBeConstantArgs)) {
                     constantCalls.add(methodCall);
                 }
             }
         }
 
         constantCalls.stream()
-                        .filter(cc -> REFLECTIVE_CALL_HANDLERS.containsKey(new MethodCallUtils.Signature(cc)))
+                        .filter(cc -> REFLECTIVE_CALL_CONSTANT_DEFINITIONS.containsKey(new MethodCallUtils.Signature(cc)))
                         .forEach(NativeImageReflectionAgent::tagAsConstant);
     }
 
@@ -325,70 +324,6 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
             methodCall.desc = "(L" + methodCall.owner + ";" + methodCall.desc.substring(1);
         }
         methodCall.owner = CONSTANT_TAGS_CLASS.getName().replace('.', '/');
-    }
-
-    private static boolean isForName1Constant(AnalyzerSuite analyzers, CallContext callContext) {
-        return analyzers.stringAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame));
-    }
-
-    private static boolean isForName3Constant(AnalyzerSuite analyzers, CallContext callContext) {
-        return analyzers.stringAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame)) &&
-                        analyzers.booleanAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 1, callContext.frame));
-    }
-
-    private static boolean isFieldQueryConstant(AnalyzerSuite analyzers, CallContext callContext) {
-        return analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame)) &&
-                        analyzers.stringAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 1, callContext.frame));
-    }
-
-    private static boolean isConstructorQueryConstant(AnalyzerSuite analyzers, CallContext callContext) {
-        return analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame)) &&
-                        analyzers.classArrayAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 1, callContext.frame), callContext.call);
-    }
-
-    private static boolean isMethodQueryConstant(AnalyzerSuite analyzers, CallContext callContext) {
-        return analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame)) &&
-                        analyzers.stringAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 1, callContext.frame)) &&
-                        analyzers.classArrayAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 2, callContext.frame), callContext.call);
-    }
-
-    private static boolean isBulkQueryConstant(AnalyzerSuite analyzers, CallContext callContext) {
-        return analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame));
-    }
-
-    private static boolean isMethodHandleClassQueryConstant(AnalyzerSuite analyzers, CallContext callContext) {
-        return analyzers.methodHandlesLookupAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame)) &&
-                analyzers.stringAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 1, callContext.frame));
-    }
-
-    private static boolean isMethodHandleMethodQueryConstant(AnalyzerSuite analyzers, CallContext callContext) {
-        return analyzers.methodHandlesLookupAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame)) &&
-                analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 1, callContext.frame)) &&
-                analyzers.stringAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 2, callContext.frame)) &&
-                analyzers.methodTypeAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 3, callContext.frame));
-    }
-
-    private static boolean isMethodHandleConstructorQueryConstant(AnalyzerSuite analyzers, CallContext callContext) {
-        return analyzers.methodHandlesLookupAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame)) &&
-                analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 1, callContext.frame)) &&
-                analyzers.methodTypeAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 2, callContext.frame));
-    }
-
-    private static boolean isMethodHandleFieldQueryConstant(AnalyzerSuite analyzers, CallContext callContext) {
-        return analyzers.methodHandlesLookupAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 0, callContext.frame)) &&
-                        analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 1, callContext.frame)) &&
-                        analyzers.stringAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 2, callContext.frame)) &&
-                        analyzers.classAnalyzer.isConstant(MethodCallUtils.getCallArg(callContext.call, 3, callContext.frame));
-    }
-
-    record CallContext(MethodInsnNode call, Frame<SourceValue> frame) {
-
-    }
-
-    record AnalyzerSuite(ConstantStringAnalyzer stringAnalyzer, ConstantBooleanAnalyzer booleanAnalyzer,
-                    ConstantClassAnalyzer classAnalyzer, ConstantArrayAnalyzer classArrayAnalyzer,
-                    ConstantValueAnalyzer methodTypeAnalyzer, ConstantValueAnalyzer methodHandlesLookupAnalyzer) {
-
     }
 
     @Override

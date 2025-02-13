@@ -44,4 +44,9 @@ public class ConstantBooleanAnalyzer extends ConstantValueAnalyzer {
     protected boolean isConstant(SourceValue value, AbstractInsnNode sourceInstruction, Frame<SourceValue> sourceInstructionFrame) {
         return sourceInstruction.getOpcode() == ICONST_0 || sourceInstruction.getOpcode() == ICONST_1;
     }
+
+    @Override
+    protected String typeDescriptor() {
+        return "Z";
+    }
 }
