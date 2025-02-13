@@ -36,7 +36,7 @@ import java.util.Set;
 import static jdk.internal.org.objectweb.asm.Opcodes.ALOAD;
 import static jdk.internal.org.objectweb.asm.Opcodes.ASTORE;
 
-public abstract class ConstantValueAnalyzer {
+public class ConstantValueAnalyzer {
 
     private final AbstractInsnNode[] instructions;
     private final Frame<SourceValue>[] frames;
@@ -70,5 +70,7 @@ public abstract class ConstantValueAnalyzer {
         return isConstant(value, sourceInstruction, sourceInstructionFrame);
     }
 
-    protected abstract boolean isConstant(SourceValue value, AbstractInsnNode sourceInstruction, Frame<SourceValue> sourceInstructionFrame);
+    protected boolean isConstant(SourceValue value, AbstractInsnNode sourceInstruction, Frame<SourceValue> sourceInstructionFrame) {
+        return false;
+    }
 }

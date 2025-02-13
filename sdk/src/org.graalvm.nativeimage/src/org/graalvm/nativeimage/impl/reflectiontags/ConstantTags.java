@@ -40,6 +40,10 @@
  */
 package org.graalvm.nativeimage.impl.reflectiontags;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
+import java.lang.invoke.VarHandle;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -82,6 +86,16 @@ public final class ConstantTags {
             mapping.put(ConstantTags.class.getDeclaredMethod("getPermittedSubclasses", Class.class), Class.class.getDeclaredMethod("getPermittedSubclasses"));
             mapping.put(ConstantTags.class.getDeclaredMethod("getRecordComponents", Class.class), Class.class.getDeclaredMethod("getRecordComponents"));
             mapping.put(ConstantTags.class.getDeclaredMethod("getSigners", Class.class), Class.class.getDeclaredMethod("getSigners"));
+            mapping.put(ConstantTags.class.getDeclaredMethod("findClass", MethodHandles.Lookup.class, String.class), MethodHandles.Lookup.class.getDeclaredMethod("findClass", String.class));
+            mapping.put(ConstantTags.class.getDeclaredMethod("findVirtual", MethodHandles.Lookup.class, Class.class, String.class, MethodType.class), MethodHandles.Lookup.class.getDeclaredMethod("findVirtual", Class.class, String.class, MethodType.class));
+            mapping.put(ConstantTags.class.getDeclaredMethod("findStatic", MethodHandles.Lookup.class, Class.class, String.class, MethodType.class), MethodHandles.Lookup.class.getDeclaredMethod("findStatic", Class.class, String.class, MethodType.class));
+            mapping.put(ConstantTags.class.getDeclaredMethod("findConstructor", MethodHandles.Lookup.class, Class.class, MethodType.class), MethodHandles.Lookup.class.getDeclaredMethod("findConstructor", Class.class, MethodType.class));
+            mapping.put(ConstantTags.class.getDeclaredMethod("findGetter", MethodHandles.Lookup.class, Class.class, String.class, Class.class), MethodHandles.Lookup.class.getDeclaredMethod("findGetter", Class.class, String.class, Class.class));
+            mapping.put(ConstantTags.class.getDeclaredMethod("findStaticGetter", MethodHandles.Lookup.class, Class.class, String.class, Class.class), MethodHandles.Lookup.class.getDeclaredMethod("findStaticGetter", Class.class, String.class, Class.class));
+            mapping.put(ConstantTags.class.getDeclaredMethod("findSetter", MethodHandles.Lookup.class, Class.class, String.class, Class.class), MethodHandles.Lookup.class.getDeclaredMethod("findSetter", Class.class, String.class, Class.class));
+            mapping.put(ConstantTags.class.getDeclaredMethod("findStaticSetter", MethodHandles.Lookup.class, Class.class, String.class, Class.class), MethodHandles.Lookup.class.getDeclaredMethod("findStaticSetter", Class.class, String.class, Class.class));
+            mapping.put(ConstantTags.class.getDeclaredMethod("findVarHandle", MethodHandles.Lookup.class, Class.class, String.class, Class.class), MethodHandles.Lookup.class.getDeclaredMethod("findVarHandle", Class.class, String.class, Class.class));
+            mapping.put(ConstantTags.class.getDeclaredMethod("findStaticVarHandle", MethodHandles.Lookup.class, Class.class, String.class, Class.class), MethodHandles.Lookup.class.getDeclaredMethod("findStaticVarHandle", Class.class, String.class, Class.class));
         } catch (NoSuchMethodException e) {
             throw new RuntimeException(e);
         }
@@ -168,5 +182,45 @@ public final class ConstantTags {
 
     public static Object[] getSigners(Class<?> clazz) {
         return clazz.getSigners();
+    }
+
+    public static Class<?> findClass(MethodHandles.Lookup lookup, String className) throws ClassNotFoundException, IllegalAccessException {
+        return lookup.findClass(className);
+    }
+
+    public static MethodHandle findVirtual(MethodHandles.Lookup lookup, Class<?> clazz, String methodName, MethodType methodType) throws NoSuchMethodException, IllegalAccessException {
+        return lookup.findVirtual(clazz, methodName, methodType);
+    }
+
+    public static MethodHandle findStatic(MethodHandles.Lookup lookup, Class<?> clazz, String methodName, MethodType methodType) throws NoSuchMethodException, IllegalAccessException {
+        return lookup.findStatic(clazz, methodName, methodType);
+    }
+
+    public static MethodHandle findConstructor(MethodHandles.Lookup lookup, Class<?> clazz, MethodType methodType) throws NoSuchMethodException, IllegalAccessException {
+        return lookup.findConstructor(clazz, methodType);
+    }
+
+    public static MethodHandle findGetter(MethodHandles.Lookup lookup, Class<?> clazz, String name, Class<?> type) throws NoSuchFieldException, IllegalAccessException {
+        return lookup.findGetter(clazz, name, type);
+    }
+
+    public static MethodHandle findStaticGetter(MethodHandles.Lookup lookup, Class<?> clazz, String name, Class<?> type) throws NoSuchFieldException, IllegalAccessException {
+        return lookup.findStaticGetter(clazz, name, type);
+    }
+
+    public static MethodHandle findSetter(MethodHandles.Lookup lookup, Class<?> clazz, String name, Class<?> type) throws NoSuchFieldException, IllegalAccessException {
+        return lookup.findSetter(clazz, name, type);
+    }
+
+    public static MethodHandle findStaticSetter(MethodHandles.Lookup lookup, Class<?> clazz, String name, Class<?> type) throws NoSuchFieldException, IllegalAccessException {
+        return lookup.findStaticSetter(clazz, name, type);
+    }
+
+    public static VarHandle findVarHandle(MethodHandles.Lookup lookup, Class<?> clazz, String name, Class<?> type) throws NoSuchFieldException, IllegalAccessException {
+        return lookup.findVarHandle(clazz, name, type);
+    }
+
+    public static VarHandle findStaticVarHandle(MethodHandles.Lookup lookup, Class<?> clazz, String name, Class<?> type) throws NoSuchFieldException, IllegalAccessException {
+        return lookup.findStaticVarHandle(clazz, name, type);
     }
 }

@@ -851,18 +851,22 @@ public final class ReflectionPlugins {
 
             registerFoldInvocationPlugins(plugins, ConstantTags.class, "getField", "getDeclaredField", "getConstructor", "getDeclaredConstructor", "getMethod", "getDeclaredMethod");
 
-            registerStrictBulkQuery(plugins, ConstantTags.class, "getFields", RuntimeReflection::registerAllFields);
-            registerStrictBulkQuery(plugins, ConstantTags.class, "getDeclaredFields", RuntimeReflection::registerAllDeclaredFields);
-            registerStrictBulkQuery(plugins, ConstantTags.class, "getConstructors", RuntimeReflection::registerAllConstructors);
-            registerStrictBulkQuery(plugins, ConstantTags.class, "getDeclaredConstructors", RuntimeReflection::registerAllDeclaredConstructors);
-            registerStrictBulkQuery(plugins, ConstantTags.class, "getMethods", RuntimeReflection::registerAllMethods);
-            registerStrictBulkQuery(plugins, ConstantTags.class, "getDeclaredMethods", RuntimeReflection::registerAllDeclaredMethods);
-            registerStrictBulkQuery(plugins, ConstantTags.class, "getClasses", RuntimeReflection::registerAllClasses);
-            registerStrictBulkQuery(plugins, ConstantTags.class, "getDeclaredClasses", RuntimeReflection::registerAllDeclaredClasses);
-            registerStrictBulkQuery(plugins, ConstantTags.class, "getNestMembers", RuntimeReflection::registerAllNestMembers);
-            registerStrictBulkQuery(plugins, ConstantTags.class, "getPermittedSubclasses", RuntimeReflection::registerAllPermittedSubclasses);
-            registerStrictBulkQuery(plugins, ConstantTags.class, "getRecordComponents", RuntimeReflection::registerAllRecordComponents);
-            registerStrictBulkQuery(plugins, ConstantTags.class, "getSigners", RuntimeReflection::registerAllSigners);
+            registerFoldInvocationPlugins(plugins, ConstantTags.class, "findClass", "findVirtual", "findStatic", "findConstructor", "findGetter", "findStaticGetter", "findSetter", "findStaticSetter", "findVarHandle", "findStaticVarHandle");
+
+            if (reason.duringAnalysis() && reason != ParsingReason.JITCompilation) {
+                registerStrictBulkQuery(plugins, ConstantTags.class, "getFields", RuntimeReflection::registerAllFields);
+                registerStrictBulkQuery(plugins, ConstantTags.class, "getDeclaredFields", RuntimeReflection::registerAllDeclaredFields);
+                registerStrictBulkQuery(plugins, ConstantTags.class, "getConstructors", RuntimeReflection::registerAllConstructors);
+                registerStrictBulkQuery(plugins, ConstantTags.class, "getDeclaredConstructors", RuntimeReflection::registerAllDeclaredConstructors);
+                registerStrictBulkQuery(plugins, ConstantTags.class, "getMethods", RuntimeReflection::registerAllMethods);
+                registerStrictBulkQuery(plugins, ConstantTags.class, "getDeclaredMethods", RuntimeReflection::registerAllDeclaredMethods);
+                registerStrictBulkQuery(plugins, ConstantTags.class, "getClasses", RuntimeReflection::registerAllClasses);
+                registerStrictBulkQuery(plugins, ConstantTags.class, "getDeclaredClasses", RuntimeReflection::registerAllDeclaredClasses);
+                registerStrictBulkQuery(plugins, ConstantTags.class, "getNestMembers", RuntimeReflection::registerAllNestMembers);
+                registerStrictBulkQuery(plugins, ConstantTags.class, "getPermittedSubclasses", RuntimeReflection::registerAllPermittedSubclasses);
+                registerStrictBulkQuery(plugins, ConstantTags.class, "getRecordComponents", RuntimeReflection::registerAllRecordComponents);
+                registerStrictBulkQuery(plugins, ConstantTags.class, "getSigners", RuntimeReflection::registerAllSigners);
+            }
         }
 
         private void registerStrictBulkQuery(InvocationPlugins plugins, Class<?> clazz, String methodName, Consumer<Class<?>> registrationCallback) {
