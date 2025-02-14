@@ -851,7 +851,8 @@ public final class ReflectionPlugins {
 
             registerFoldInvocationPlugins(plugins, ConstantTags.class, "getField", "getDeclaredField", "getConstructor", "getDeclaredConstructor", "getMethod", "getDeclaredMethod");
 
-            registerFoldInvocationPlugins(plugins, ConstantTags.class, "findClass", "findVirtual", "findStatic", "findConstructor", "findGetter", "findStaticGetter", "findSetter", "findStaticSetter", "findVarHandle", "findStaticVarHandle");
+            registerFoldInvocationPlugins(plugins, ConstantTags.class, "findClass", "findVirtual", "findStatic", "findConstructor", "findGetter", "findStaticGetter", "findSetter", "findStaticSetter",
+                            "findVarHandle", "findStaticVarHandle");
 
             if (reason.duringAnalysis() && reason != ParsingReason.JITCompilation) {
                 registerStrictBulkQuery(plugins, ConstantTags.class, "getFields", RuntimeReflection::registerAllFields);

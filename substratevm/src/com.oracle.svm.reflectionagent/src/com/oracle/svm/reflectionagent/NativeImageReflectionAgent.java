@@ -99,9 +99,9 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
     private static final Class<?> CONSTANT_TAGS_CLASS = ConstantTags.class;
 
     /*
-     * Mapping from method signature to indices of arguments which must be constant
-     * in order for the call to that method to be considered constant. In case a method
-     * is not static, a 0 index corresponds to the method caller.
+     * Mapping from method signature to indices of arguments which must be constant in order for the
+     * call to that method to be considered constant. In case a method is not static, a 0 index
+     * corresponds to the method caller.
      */
     private static final Map<MethodCallUtils.Signature, int[]> REFLECTIVE_CALL_CONSTANT_DEFINITIONS = createReflectiveCallConstantDefinitions();
     private static final Map<MethodCallUtils.Signature, int[]> NON_REFLECTIVE_CALL_CONSTANT_DEFINITIONS = createNonReflectiveCallConstantDefinitions();
@@ -112,8 +112,8 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
      * folding in {@link com.oracle.svm.hosted.snippets.ReflectionPlugins}.
      * <p>
      * If proven as constant by our analysis, calls to these methods will be tagged by redirecting
-     * their owner to {@link org.graalvm.nativeimage.impl.reflectiontags.ConstantTags} (making them static
-     * invocations in the process if necessary).
+     * their owner to {@link org.graalvm.nativeimage.impl.reflectiontags.ConstantTags} (making them
+     * static invocations in the process if necessary).
      */
     private static Map<MethodCallUtils.Signature, int[]> createReflectiveCallConstantDefinitions() {
         Map<MethodCallUtils.Signature, int[]> definitions = new HashMap<>();
@@ -156,8 +156,8 @@ public class NativeImageReflectionAgent extends JvmtiAgentBase<NativeImageReflec
 
     /**
      * Defines methods which we still need to track, but not tag with
-     * {@link org.graalvm.nativeimage.impl.reflectiontags.ConstantTags}. An example of this are various methods for
-     * {@link java.lang.invoke.MethodType} construction.
+     * {@link org.graalvm.nativeimage.impl.reflectiontags.ConstantTags}. An example of this are
+     * various methods for {@link java.lang.invoke.MethodType} construction.
      */
     private static Map<MethodCallUtils.Signature, int[]> createNonReflectiveCallConstantDefinitions() {
         Map<MethodCallUtils.Signature, int[]> definitions = new HashMap<>();

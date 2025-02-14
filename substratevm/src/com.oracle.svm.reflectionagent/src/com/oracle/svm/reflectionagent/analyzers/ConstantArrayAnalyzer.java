@@ -146,8 +146,8 @@ public class ConstantArrayAnalyzer {
         nodeIndices.add(callSiteInstructionIndex);
 
         /*
-         * Run a BFS in the reversed CFG from the call site, looking
-         * for any potential forbidden operations for constant arrays.
+         * Run a BFS in the reversed CFG from the call site, looking for any potential forbidden
+         * operations for constant arrays.
          */
         boolean[] visited = new boolean[frames.length];
         while (!nodeIndices.isEmpty()) {
@@ -169,15 +169,17 @@ public class ConstantArrayAnalyzer {
     }
 
     /**
-     * Checks if the instruction at {@code instructionIndex} is an assignment instruction
-     * (to a variable or a field) and its argument's value can be traced to {@code originalStoreInstruction}
-     * which represents the initial assignment of an array reference to a variable.
+     * Checks if the instruction at {@code instructionIndex} is an assignment instruction (to a
+     * variable or a field) and its argument's value can be traced to
+     * {@code originalStoreInstruction} which represents the initial assignment of an array
+     * reference to a variable.
      * <p>
-     * We want to avoid these cases when marking an array as constant because it could
-     * potentially be modified through a field or variable which we aren't tracking.
+     * We want to avoid these cases when marking an array as constant because it could potentially
+     * be modified through a field or variable which we aren't tracking.
      * <p>
-     * In the following example, we want to avoid marking the params array as constant when attempting to
-     * fold the second {@code getMethod} call:
+     * In the following example, we want to avoid marking the params array as constant when
+     * attempting to fold the second {@code getMethod} call:
+     *
      * <pre>
      * {@code
      * Class<?>[] params = new Class<?>[2];
@@ -203,10 +205,10 @@ public class ConstantArrayAnalyzer {
     }
 
     /**
-     * Similar as with {@code isForbiddenStore}, arrays could be modified in methods they
-     * are passed to, so we want to avoid marking them as constant after that. An exception
-     * to this are the reflective methods we're already tracking with our analysis, as we know
-     * they won't modify the passed array in any way.
+     * Similar as with {@code isForbiddenStore}, arrays could be modified in methods they are passed
+     * to, so we want to avoid marking them as constant after that. An exception to this are the
+     * reflective methods we're already tracking with our analysis, as we know they won't modify the
+     * passed array in any way.
      */
     private boolean isForbiddenMethodCall(int instructionIndex, AbstractInsnNode originalStoreInstruction) {
         AbstractInsnNode instruction = instructions[instructionIndex];
