@@ -289,6 +289,9 @@ class BaristaNativeImageBenchmarkSuite(mx_sdk_benchmark.BaristaBenchmarkSuite, m
 
     def benchmarkList(self, bmSuiteArgs):
         exclude = []
+        if mx.get_jdk().javaCompliance == "21":
+            # ktor-hello-world fails with UnsupportedClassVersionError on JDK 21 (GR-60507)
+            exclude.append("ktor-hello-world")
         return [b for b in self.completeBenchmarkList(bmSuiteArgs) if b not in exclude]
 
     def stages(self, bm_suite_args: List[str]) -> List[mx_sdk_benchmark.Stage]:
@@ -349,6 +352,11 @@ class BaristaNativeImageBenchmarkSuite(mx_sdk_benchmark.BaristaBenchmarkSuite, m
         # Added by BaristaNativeImageCommand
         return []
 
+    def extra_image_build_argument(self, benchmark, args):
+        return [
+            "--install-exit-handlers"
+        ] + super().extra_image_build_argument(benchmark, args)
+
     def run(self, benchmarks, bmSuiteArgs) -> mx_benchmark.DataPoints:
         self.context = mx_sdk_benchmark.BaristaBenchmarkSuite.RuntimeContext(self, None, benchmarks[0], bmSuiteArgs)
         return self.intercept_run(super(), benchmarks, bmSuiteArgs)
@@ -383,6 +391,7 @@ class BaristaNativeImageBenchmarkSuite(mx_sdk_benchmark.BaristaBenchmarkSuite, m
             Useful for the `agent` and `instrument-run` stages.
             """
             return [
+                "--startup-iteration-count", "1",
                 "--warmup-iteration-count", "1",
                 "--warmup-duration", "5",
                 "--throughput-iteration-count", "0",
@@ -457,6 +466,8 @@ class BaristaNativeImageBenchmarkSuite(mx_sdk_benchmark.BaristaBenchmarkSuite, m
             if stage == mx_sdk_benchmark.Stage.INSTRUMENT_RUN:
                 # Make instrument run short
                 ni_barista_cmd += self._short_load_testing_phases()
+                if suite.context.benchmark == "play-scala-hello-world":
+                    self._updateCommandOption(ni_barista_cmd, "--vm-options", "-v", "-Dpidfile.path=/dev/null")
                 # Add explicit instrument stage args
                 ni_barista_cmd += mx_sdk_benchmark.parse_prefixed_args("-Dnative-image.benchmark.extra-profile-run-arg=", suite.context.bmSuiteArgs) or mx_sdk_benchmark.parse_prefixed_args("-Dnative-image.benchmark.extra-run-arg=", suite.context.bmSuiteArgs)
             else:

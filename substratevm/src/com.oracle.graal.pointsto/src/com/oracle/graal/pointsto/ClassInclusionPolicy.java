@@ -24,6 +24,7 @@
  */
 package com.oracle.graal.pointsto;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Executable;
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
@@ -32,6 +33,7 @@ import java.lang.reflect.Modifier;
 import org.graalvm.nativeimage.AnnotationAccess;
 import org.graalvm.nativeimage.hosted.Feature;
 
+import com.oracle.graal.pointsto.meta.AnalysisField;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
 import com.oracle.svm.core.annotate.TargetClass;
 
@@ -89,6 +91,16 @@ public abstract class ClassInclusionPolicy {
     }
 
     /**
+     * Determine if the given field needs to be included in the image according to the policy.
+     */
+    public boolean isFieldIncluded(AnalysisField field) {
+        if (!bb.getHostVM().platformSupported(field)) {
+            return false;
+        }
+        return bb.getHostVM().isFieldIncluded(bb, field);
+    }
+
+    /**
      * Includes the given class in the image.
      */
     public void includeClass(Class<?> cls) {
@@ -118,6 +130,13 @@ public abstract class ClassInclusionPolicy {
      * Includes the given field in the image.
      */
     public void includeField(Field field) {
+        bb.postTask(debug -> bb.addRootField(field));
+    }
+
+    /**
+     * Includes the given field in the image.
+     */
+    public void includeField(AnalysisField field) {
         bb.postTask(debug -> bb.addRootField(field));
     }
 
@@ -163,7 +182,7 @@ public abstract class ClassInclusionPolicy {
                 Class<?> declaringClass = method.getDeclaringClass();
                 AnalysisMethod analysisMethod = bb.getMetaAccess().lookupJavaMethod(method);
                 registerMethod(method.getModifiers(), declaringClass, analysisMethod);
-                bb.forcedAddRootMethod(analysisMethod, false, reason);
+                bb.forcedAddRootMethod(analysisMethod, analysisMethod.isConstructor(), reason);
             });
         }
 
@@ -172,7 +191,7 @@ public abstract class ClassInclusionPolicy {
             bb.postTask(debug -> {
                 Class<?> declaringClass = method.getDeclaringClass().getJavaClass();
                 registerMethod(method.getModifiers(), declaringClass, method);
-                bb.forcedAddRootMethod(method, false, reason);
+                bb.forcedAddRootMethod(method, method.isConstructor(), reason);
             });
         }
 
@@ -203,12 +222,12 @@ public abstract class ClassInclusionPolicy {
 
         @Override
         public void includeMethod(Executable method) {
-            bb.postTask(debug -> bb.addRootMethod(method, false, reason));
+            bb.postTask(debug -> bb.addRootMethod(method, method instanceof Constructor<?>, reason));
         }
 
         @Override
         public void includeMethod(AnalysisMethod method) {
-            bb.postTask(debug -> bb.addRootMethod(method, false, reason));
+            bb.postTask(debug -> bb.addRootMethod(method, method.isConstructor(), reason));
         }
     }
 

@@ -61,6 +61,7 @@ import com.oracle.graal.pointsto.util.AtomicUtils;
 import com.oracle.graal.pointsto.util.ConcurrentLightHashSet;
 import com.oracle.svm.util.LogUtils;
 
+import jdk.graal.compiler.debug.Assertions;
 import jdk.graal.compiler.debug.GraalError;
 import jdk.vm.ci.code.BytecodePosition;
 import jdk.vm.ci.meta.Assumptions.AssumptionResult;
@@ -107,9 +108,6 @@ public abstract class AnalysisType extends AnalysisElement implements WrappedJav
 
     static final AtomicReferenceFieldUpdater<AnalysisType, Object> overrideableMethodsUpdater = AtomicReferenceFieldUpdater
                     .newUpdater(AnalysisType.class, Object.class, "overrideableMethods");
-
-    private static final AtomicReferenceFieldUpdater<AnalysisType, Object> trackAcrossLayersUpdater = AtomicReferenceFieldUpdater
-                    .newUpdater(AnalysisType.class, Object.class, "trackAcrossLayers");
 
     protected final AnalysisUniverse universe;
     private final ResolvedJavaType wrapped;
@@ -221,14 +219,9 @@ public abstract class AnalysisType extends AnalysisElement implements WrappedJav
      */
     @SuppressWarnings("unused") private volatile Object overrideableMethods;
 
-    /**
-     * See {@link AnalysisElement#isTrackedAcrossLayers} for explanation.
-     */
-    @SuppressWarnings("unused") private volatile Object trackAcrossLayers;
-    private final boolean enableTrackAcrossLayers;
-
     @SuppressWarnings("this-escape")
     public AnalysisType(AnalysisUniverse universe, ResolvedJavaType javaType, JavaKind storageKind, AnalysisType objectType, AnalysisType cloneableType) {
+        super(universe.hostVM.enableTrackAcrossLayers());
         this.universe = universe;
         this.wrapped = javaType;
         qualifiedName = wrapped.toJavaName(true);
@@ -352,8 +345,6 @@ public abstract class AnalysisType extends AnalysisElement implements WrappedJav
             AnalysisError.guarantee(universe.getHeapScanner() != null, "Heap scanner is not available.");
             return universe.getHeapScanner().computeTypeData(this);
         });
-
-        this.enableTrackAcrossLayers = universe.hostVM.enableTrackAcrossLayers();
     }
 
     private AnalysisType[] convertTypes(ResolvedJavaType[] originalTypes) {
@@ -571,6 +562,7 @@ public abstract class AnalysisType extends AnalysisElement implements WrappedJav
     }
 
     protected void onInstantiated() {
+        assert !isWordType() : Assertions.errorMessage("Word types cannot be instantiated", this);
         forAllSuperTypes(superType -> AtomicUtils.atomicMark(superType, isAnySubtypeInstantiatedUpdater));
 
         universe.onTypeInstantiated(this);
@@ -611,9 +603,7 @@ public abstract class AnalysisType extends AnalysisElement implements WrappedJav
 
     @Override
     protected void onReachable(Object reason) {
-        if (enableTrackAcrossLayers) {
-            AtomicUtils.atomicSet(this, reason, trackAcrossLayersUpdater);
-        }
+        registerAsTrackedAcrossLayers(reason);
 
         List<AnalysisFuture<Void>> futures = new ArrayList<>();
         notifyReachabilityCallbacks(universe, futures);
@@ -651,6 +641,28 @@ public abstract class AnalysisType extends AnalysisElement implements WrappedJav
         ensureOnTypeReachableTaskDone();
     }
 
+    @Override
+    protected void onTrackedAcrossLayers(Object reason) {
+        AnalysisError.guarantee(!getUniverse().sealed(), "Type %s was marked as tracked after the universe was sealed", this);
+        if (superClass != null) {
+            superClass.registerAsTrackedAcrossLayers(reason);
+        }
+        for (AnalysisType inter : interfaces) {
+            inter.registerAsTrackedAcrossLayers(reason);
+        }
+        try {
+            AnalysisType enclosingType = getEnclosingType();
+            if (enclosingType != null) {
+                enclosingType.registerAsTrackedAcrossLayers(reason);
+            }
+        } catch (InternalError | TypeNotPresentException | LinkageError e) {
+            /*
+             * Ignore missing type errors. The build process should not fail if the incomplete type
+             * is not reached through other paths.
+             */
+        }
+    }
+
     /** Prepare information that {@link AnalysisMethod#collectMethodImplementations} needs. */
     private void prepareMethodImplementations(AnalysisType superType) {
         ConcurrentLightHashSet.forEach(superType, overrideableMethodsUpdater, (AnalysisMethod method) -> {
@@ -659,6 +671,9 @@ public abstract class AnalysisType extends AnalysisElement implements WrappedJav
             AnalysisMethod override = resolveConcreteMethod(method, null);
             if (override != null && !override.equals(method)) {
                 ConcurrentLightHashSet.addElement(method, AnalysisMethod.allImplementationsUpdater, override);
+                if (method.reachableInCurrentLayer()) {
+                    override.setReachableInCurrentLayer();
+                }
             }
         });
     }
@@ -875,11 +890,6 @@ public abstract class AnalysisType extends AnalysisElement implements WrappedJav
         return isReachable;
     }
 
-    @Override
-    public boolean isTrackedAcrossLayers() {
-        return AtomicUtils.isSet(this, trackAcrossLayersUpdater);
-    }
-
     /**
      * The kind of the field in memory (in contrast to {@link #getJavaKind()}, which is the kind of
      * the field on the Java type system level). For example {@link WordBase word types} have a
@@ -895,7 +905,9 @@ public abstract class AnalysisType extends AnalysisElement implements WrappedJav
      */
     public boolean isWordType() {
         /* Word types are currently the only types where kind and storageKind differ. */
-        return getJavaKind() != getStorageKind();
+        boolean wordType = getJavaKind() != getStorageKind();
+        assert !wordType || getJavaKind().isObject() : Assertions.errorMessage("Only words are expected to have a discrepancy between java kind and storage kind", this);
+        return wordType;
     }
 
     @Override
@@ -1350,14 +1362,11 @@ public abstract class AnalysisType extends AnalysisElement implements WrappedJav
             return dispatchTableMethods;
         }
 
-        Set<ResolvedJavaMethod> wrappedMethods = new HashSet<>();
-        wrappedMethods.addAll(Arrays.asList(getWrapped().getDeclaredMethods(false)));
-        wrappedMethods.addAll(Arrays.asList(getWrapped().getDeclaredConstructors(false)));
-
         var resultSet = new HashSet<AnalysisMethod>();
-        for (ResolvedJavaMethod m : wrappedMethods) {
+        for (ResolvedJavaMethod m : getWrapped().getDeclaredMethods(false)) {
+            assert !m.isConstructor() : Assertions.errorMessage("Unexpected constructor", m);
             if (m.isStatic()) {
-                /* Only looking at member methods and constructors */
+                /* Only looking at member methods */
                 continue;
             }
             try {

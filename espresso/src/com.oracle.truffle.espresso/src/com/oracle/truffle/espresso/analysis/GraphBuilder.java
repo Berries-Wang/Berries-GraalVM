@@ -20,7 +20,6 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-
 package com.oracle.truffle.espresso.analysis;
 
 import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.JSR;
@@ -37,13 +36,13 @@ import com.oracle.truffle.espresso.analysis.graph.EspressoBlockWithHandlers;
 import com.oracle.truffle.espresso.analysis.graph.EspressoExecutionGraph;
 import com.oracle.truffle.espresso.analysis.graph.Graph;
 import com.oracle.truffle.espresso.analysis.graph.LinkedBlock;
+import com.oracle.truffle.espresso.classfile.ExceptionHandler;
 import com.oracle.truffle.espresso.classfile.bytecode.BytecodeLookupSwitch;
 import com.oracle.truffle.espresso.classfile.bytecode.BytecodeStream;
 import com.oracle.truffle.espresso.classfile.bytecode.BytecodeSwitch;
 import com.oracle.truffle.espresso.classfile.bytecode.BytecodeTableSwitch;
 import com.oracle.truffle.espresso.classfile.bytecode.Bytecodes;
 import com.oracle.truffle.espresso.impl.Method;
-import com.oracle.truffle.espresso.classfile.ExceptionHandler;
 
 public final class GraphBuilder {
     public static Graph<? extends LinkedBlock> build(Method method) {

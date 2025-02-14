@@ -20,7 +20,6 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-
 package com.oracle.truffle.espresso.runtime;
 
 import java.lang.ref.ReferenceQueue;
@@ -157,6 +156,10 @@ final class EspressoReferenceDrainer extends ContextAccessImpl {
 
     void waitForReferencePendingList() {
         if (hasReferencePendingList()) {
+            return;
+        }
+        if (!getContext().multiThreadingEnabled()) {
+            // Ensure we do not block in single threaded mode.
             return;
         }
         doWaitForReferencePendingList();

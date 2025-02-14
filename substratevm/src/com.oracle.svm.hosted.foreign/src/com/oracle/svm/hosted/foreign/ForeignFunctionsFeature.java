@@ -164,7 +164,7 @@ public class ForeignFunctionsFeature implements InternalFeature {
         }
     }
 
-    private class RuntimeForeignAccessSupportImpl extends ConditionalConfigurationRegistry implements StronglyTypedRuntimeForeignAccessSupport {
+    private final class RuntimeForeignAccessSupportImpl extends ConditionalConfigurationRegistry implements StronglyTypedRuntimeForeignAccessSupport {
 
         private final Lookup implLookup = ReflectionUtil.readStaticField(MethodHandles.Lookup.class, "IMPL_LOOKUP");
 
@@ -186,7 +186,7 @@ public class ForeignFunctionsFeature implements InternalFeature {
             DirectMethodHandleDesc directMethodHandleDesc = target.describeConstable()
                             .filter(x -> x instanceof DirectMethodHandleDesc dmh && dmh.kind() == Kind.STATIC)
                             .map(x -> ((DirectMethodHandleDesc) x))
-                            .orElseThrow(() -> new IllegalArgumentException("target must be a direct method handle to a static method"));
+                            .orElseThrow(() -> new IllegalArgumentException("Target must be a direct method handle to a static method"));
             /*
              * The call 'implLookup.revealDirect' can only succeed if the method handle is
              * crackable. The call is expected to succeed because we already call
@@ -413,7 +413,7 @@ public class ForeignFunctionsFeature implements InternalFeature {
                 AnalysisMethod analysisStub = access.getUniverse().lookup(stub);
                 access.getBigBang().addRootMethod(analysisStub, false, "Foreign stub, registered in " + ForeignFunctionsFeature.class);
                 if (registerAsEntryPoints) {
-                    analysisStub.registerAsEntryPoint(CEntryPointData.createCustomUnpublished());
+                    analysisStub.registerAsNativeEntryPoint(CEntryPointData.createCustomUnpublished());
                 }
                 created.put(key, stub);
                 factory.registerStub(key, new MethodPointer(analysisStub));

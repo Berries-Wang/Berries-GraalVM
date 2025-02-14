@@ -135,7 +135,7 @@ public class LIRNativeImageCodeCache extends NativeImageCodeCache {
         return true;
     }
 
-    @SuppressWarnings("try")
+    @SuppressWarnings({"try", "resource"})
     @Override
     public void layoutMethods(DebugContext debug, BigBang bb) {
 
@@ -184,6 +184,8 @@ public class LIRNativeImageCodeCache extends NativeImageCodeCache {
                         }
                         orderedTrampolineMap.put(method, sortedTrampolines);
                     }
+
+                    DeadlockWatchdog.singleton().recordActivity();
                 }
             }
 
@@ -222,6 +224,7 @@ public class LIRNativeImageCodeCache extends NativeImageCodeCache {
      * After the initial method layout, on some platforms some direct calls between methods may be
      * too far apart. When this happens a trampoline must be inserted to reach the call target.
      */
+    @SuppressWarnings("resource")
     private void addDirectCallTrampolines(Map<HostedMethod, Integer> curOffsetMap) {
         HostedDirectCallTrampolineSupport trampolineSupport = HostedDirectCallTrampolineSupport.singleton();
 
@@ -295,6 +298,8 @@ public class LIRNativeImageCodeCache extends NativeImageCodeCache {
                 curPos = computeNextMethodStart(curPos, 0);
                 callerCompilationNum++;
             }
+
+            DeadlockWatchdog.singleton().recordActivity();
         } while (changed);
     }
 
@@ -384,7 +389,7 @@ public class LIRNativeImageCodeCache extends NativeImageCodeCache {
                     // which is also in the code cache (a.k.a. a section-local call).
                     // This will change, and we will have to case-split here... but not yet.
                     HostedMethod callTarget = (HostedMethod) call.target;
-                    VMError.guarantee(!callTarget.wrapped.isInBaseLayer(), "Unexpected direct call to base layer method %s. These calls are currently lowered to indirect calls.", callTarget);
+                    VMError.guarantee(!callTarget.isCompiledInPriorLayer(), "Unexpected direct call to base layer method %s. These calls are currently lowered to indirect calls.", callTarget);
                     int callTargetStart = callTarget.getCodeAddressOffset();
                     if (trampolineOffsetMap != null && trampolineOffsetMap.containsKey(callTarget)) {
                         callTargetStart = trampolineOffsetMap.get(callTarget);

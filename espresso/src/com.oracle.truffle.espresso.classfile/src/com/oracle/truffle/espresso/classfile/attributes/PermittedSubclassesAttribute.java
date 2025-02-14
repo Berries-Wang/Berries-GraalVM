@@ -20,15 +20,15 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-
 package com.oracle.truffle.espresso.classfile.attributes;
 
 import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.espresso.classfile.descriptors.Name;
+import com.oracle.truffle.espresso.classfile.descriptors.ParserSymbols.ParserNames;
 import com.oracle.truffle.espresso.classfile.descriptors.Symbol;
-import com.oracle.truffle.espresso.classfile.descriptors.Symbol.Name;
 
 public class PermittedSubclassesAttribute extends Attribute {
-    public static final Symbol<Name> NAME = Name.PermittedSubclasses;
+    public static final Symbol<Name> NAME = ParserNames.PermittedSubclasses;
 
     public static final PermittedSubclassesAttribute EMPTY = new PermittedSubclassesAttribute(NAME, new char[0]);
 

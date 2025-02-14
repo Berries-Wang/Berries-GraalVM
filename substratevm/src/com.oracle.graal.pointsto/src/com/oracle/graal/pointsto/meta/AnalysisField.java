@@ -40,6 +40,7 @@ import com.oracle.graal.pointsto.infrastructure.WrappedJavaField;
 import com.oracle.graal.pointsto.util.AnalysisError;
 import com.oracle.graal.pointsto.util.AnalysisFuture;
 import com.oracle.graal.pointsto.util.AtomicUtils;
+import com.oracle.svm.common.meta.GuaranteeFolded;
 
 import jdk.graal.compiler.debug.GraalError;
 import jdk.vm.ci.code.BytecodePosition;
@@ -64,10 +65,6 @@ public abstract class AnalysisField extends AnalysisElement implements WrappedJa
 
     private static final AtomicReferenceFieldUpdater<AnalysisField, Object> isUnsafeAccessedUpdater = AtomicReferenceFieldUpdater
                     .newUpdater(AnalysisField.class, Object.class, "isUnsafeAccessed");
-
-    private static final AtomicReferenceFieldUpdater<AnalysisField, Object> trackAcrossLayersUpdater = AtomicReferenceFieldUpdater
-                    .newUpdater(AnalysisField.class, Object.class, "trackAcrossLayers");
-
     private final int id;
     /** Marks a field loaded from a base layer. */
     private final boolean isInBaseLayer;
@@ -93,12 +90,6 @@ public abstract class AnalysisField extends AnalysisElement implements WrappedJa
     @SuppressWarnings("unused") private volatile Object isFolded;
     @SuppressWarnings("unused") private volatile Object isUnsafeAccessed;
 
-    /**
-     * See {@link AnalysisElement#isTrackedAcrossLayers} for explanation.
-     */
-    @SuppressWarnings("unused") private volatile Object trackAcrossLayers;
-    private final boolean enableTrackAcrossLayers;
-
     private ConcurrentMap<Object, Boolean> readBy;
     private ConcurrentMap<Object, Boolean> writtenBy;
 
@@ -117,6 +108,7 @@ public abstract class AnalysisField extends AnalysisElement implements WrappedJa
 
     @SuppressWarnings("this-escape")
     public AnalysisField(AnalysisUniverse universe, ResolvedJavaField wrappedField) {
+        super(universe.hostVM.enableTrackAcrossLayers());
         assert !wrappedField.isInternal() : wrappedField;
 
         this.position = -1;
@@ -159,8 +151,6 @@ public abstract class AnalysisField extends AnalysisElement implements WrappedJa
             id = universe.computeNextFieldId();
             isInBaseLayer = false;
         }
-
-        this.enableTrackAcrossLayers = universe.hostVM.enableTrackAcrossLayers();
     }
 
     @Override
@@ -228,6 +218,7 @@ public abstract class AnalysisField extends AnalysisElement implements WrappedJa
     }
 
     public boolean registerAsAccessed(Object reason) {
+        checkGuaranteeFolded();
         getDeclaringClass().registerAsReachable(this);
 
         assert isValidReason(reason) : "Registering a field as accessed needs to provide a valid reason.";
@@ -242,6 +233,7 @@ public abstract class AnalysisField extends AnalysisElement implements WrappedJa
      * @param reason the reason why this field is read, non-null
      */
     public boolean registerAsRead(Object reason) {
+        checkGuaranteeFolded();
         getDeclaringClass().registerAsReachable(this);
 
         assert isValidReason(reason) : "Registering a field as read needs to provide a valid reason.";
@@ -261,6 +253,7 @@ public abstract class AnalysisField extends AnalysisElement implements WrappedJa
      * @param reason the reason why this field is written, non-null
      */
     public boolean registerAsWritten(Object reason) {
+        checkGuaranteeFolded();
         getDeclaringClass().registerAsReachable(this);
 
         assert isValidReason(reason) : "Registering a field as written needs to provide a valid reason.";
@@ -275,6 +268,14 @@ public abstract class AnalysisField extends AnalysisElement implements WrappedJa
         });
     }
 
+    public boolean isGuaranteeFolded() {
+        return getAnnotation(GuaranteeFolded.class) != null;
+    }
+
+    public void checkGuaranteeFolded() {
+        AnalysisError.guarantee(!isGuaranteeFolded(), "A field that is guaranteed to always be folded is seen as accessed: %s. ", this);
+    }
+
     public void registerAsFolded(Object reason) {
         getDeclaringClass().registerAsReachable(this);
 
@@ -286,6 +287,7 @@ public abstract class AnalysisField extends AnalysisElement implements WrappedJa
     }
 
     public boolean registerAsUnsafeAccessed(Object reason) {
+        checkGuaranteeFolded();
         assert isValidReason(reason) : "Registering a field as unsafe accessed needs to provide a valid reason.";
         registerAsAccessed(reason);
         /*
@@ -383,15 +385,13 @@ public abstract class AnalysisField extends AnalysisElement implements WrappedJa
 
     @Override
     public void onReachable(Object reason) {
-        if (enableTrackAcrossLayers) {
-            AtomicUtils.atomicSet(this, reason, trackAcrossLayersUpdater);
-        }
+        registerAsTrackedAcrossLayers(reason);
         notifyReachabilityCallbacks(declaringClass.getUniverse(), new ArrayList<>());
     }
 
     @Override
-    public boolean isTrackedAcrossLayers() {
-        return AtomicUtils.isSet(this, trackAcrossLayersUpdater);
+    protected void onTrackedAcrossLayers(Object reason) {
+        AnalysisError.guarantee(!getUniverse().sealed(), "Field %s was marked as tracked after the universe was sealed", this);
     }
 
     public Object getFieldValueInterceptor() {

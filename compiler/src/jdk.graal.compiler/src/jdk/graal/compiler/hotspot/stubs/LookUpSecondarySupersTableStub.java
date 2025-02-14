@@ -32,8 +32,6 @@ import static jdk.graal.compiler.nodes.extended.BranchProbabilityNode.NOT_FREQUE
 import static jdk.graal.compiler.nodes.extended.BranchProbabilityNode.NOT_LIKELY_PROBABILITY;
 import static jdk.graal.compiler.nodes.extended.BranchProbabilityNode.probability;
 
-import org.graalvm.word.WordFactory;
-
 import jdk.graal.compiler.api.replacements.Snippet;
 import jdk.graal.compiler.core.common.spi.ForeignCallDescriptor;
 import jdk.graal.compiler.graph.Node.ConstantNodeParameter;
@@ -64,7 +62,7 @@ public class LookUpSecondarySupersTableStub extends SnippetStub {
     }
 
     // @formatter:off
-    @SyncPort(from = "https://github.com/openjdk/jdk/blob/959fa4a1a35a1bb650ec5888efaf3d0fc8cfb025/src/hotspot/cpu/x86/macroAssembler_x86.cpp#L5177-L5283",
+    @SyncPort(from = "https://github.com/openjdk/jdk/blob/98a93e115137a305aed6b7dbf1d4a7d5906fe77c/src/hotspot/cpu/x86/macroAssembler_x86.cpp#L5193-L5299",
               sha1 = "573099757de85d90c3cf8cee8ff332e195fe68c7")
     // @formatter:on
     @Snippet
@@ -105,7 +103,7 @@ public class LookUpSecondarySupersTableStub extends SnippetStub {
     }
 
     public static KlassPointer loadSecondarySupersElement(Word metaspaceArray, long index) {
-        return KlassPointer.fromWord(metaspaceArray.readWord(WordFactory.signed(HotSpotReplacementsUtil.metaspaceArrayBaseOffset(INJECTED_VMCONFIG) + index * HotSpotReplacementsUtil.wordSize()),
+        return KlassPointer.fromWord(metaspaceArray.readWord(Word.signed(HotSpotReplacementsUtil.metaspaceArrayBaseOffset(INJECTED_VMCONFIG) + index * HotSpotReplacementsUtil.wordSize()),
                         HotSpotReplacementsUtil.SECONDARY_SUPERS_ELEMENT_LOCATION));
     }
 

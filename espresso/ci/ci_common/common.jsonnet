@@ -221,15 +221,6 @@ local benchmark_suites = ['dacapo', 'renaissance', 'scala-dacapo'];
   espresso_interpreter_benchmark(env, suite, host_jvm=null):
     self.espresso_benchmark(env, suite, host_jvm=host_jvm, guest_jvm_config='interpreter', extra_args=['--', '--iterations', '10']),
 
-  scala_dacapo_warmup_benchmark(env, guest_jvm_config='default', extra_args=[]):
-    self.espresso_benchmark(
-      env,
-      self.scala_dacapo_jvm_warmup,
-      guest_jvm_config=guest_jvm_config,
-      extra_args=extra_args,
-      timelimit='5:00:00'
-    ),
-
   scala_dacapo_benchmark(env, guest_jvm_config, extra_args=[]):
     self.espresso_benchmark(
       env,
@@ -266,10 +257,6 @@ local benchmark_suites = ['dacapo', 'renaissance', 'scala-dacapo'];
     }
     + self.bench_upload,
 
-  # Scala DaCapo benchmarks that run in both JVM and native modes,
-  # Excluding factorie (too slow). kiama and scalariform have transient issues with compilation enabled.
-  scala_dacapo_jvm_warmup: 'scala-dacapo-warmup:*[scalap,scalac,scaladoc,scalaxb]',
-
   dacapo_stable(env): 'dacapo:*[fop,lusearch,luindex,sunflow,xalan]',
 
   # exclude scalatest, which goes into deopt loop and becomes slower on every subsequent operation
@@ -277,7 +264,7 @@ local benchmark_suites = ['dacapo', 'renaissance', 'scala-dacapo'];
 
   local _builds = [
     // Gates
-    that.jdk21_gate_linux_amd64 + that.eclipse + that.jdt + that.predicates(false, false, false) + that.espresso_gate(allow_warnings=false, tags='style,fullbuild', timelimit='35:00', name='gate-espresso-style-jdk21-linux-amd64'),
+    that.jdk21_gate_linux_amd64 + that.eclipse + that.jdt + that.predicates(false, false, false) + that.espresso_gate(allow_warnings=false, tags='style,fullbuild,imports', timelimit='35:00', name='gate-espresso-style-jdk21-linux-amd64'),
   ],
 
   builds: utils.add_defined_in(_builds, std.thisFile),

@@ -2,6 +2,13 @@
 
 This changelog summarizes major changes between Truffle versions relevant to languages implementors building upon the Truffle framework. The main focus is on APIs exported by Truffle.
 
+## Version 25.0
+* GR-31495 Added ability to specify language and instrument specific options using `Source.Builder.option(String, String)`. Languages may describe available source options by implementing `TruffleLanguage.getSourceOptionDescriptors()` and `TruffleInstrument.getSourceOptionDescriptors()` respectively.
+* GR-61493 Added `RootNode.prepareForCall` which allows root nodes to prepare themselves for use as a call target (or to validate whether they can be used as a call target).
+
+## Version 24.2.0
+* GR-60636 Truffle now stops compiling when the code cache fills up on HotSpot. A warning is printed when that happens.
+
 ## Version 24.2.0
 * GR-57658 Added `TruffleLanguage.Env.getLanguageInfo(Class<? extends TruffleLanguage>)` to lookup a `LanguageInfo` instance for a language class returned by `InteropLibrary.getLanguage(Object)`.
 * GR-57164 Added support for reading unaligned ints, shorts and long to `ByteArraySupport`.

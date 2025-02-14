@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -46,6 +46,7 @@ import java.util.Collection;
 import java.util.EnumSet;
 import java.util.function.BiConsumer;
 
+import com.oracle.svm.core.interpreter.InterpreterSupport;
 import org.graalvm.collections.EconomicMap;
 import org.graalvm.nativeimage.ImageSingletons;
 
@@ -138,6 +139,7 @@ import jdk.graal.compiler.lir.LabelRef;
 import jdk.graal.compiler.lir.Opcode;
 import jdk.graal.compiler.lir.StandardOp.BlockEndOp;
 import jdk.graal.compiler.lir.StandardOp.LoadConstantOp;
+import jdk.graal.compiler.lir.SwitchStrategy;
 import jdk.graal.compiler.lir.Variable;
 import jdk.graal.compiler.lir.amd64.AMD64AddressValue;
 import jdk.graal.compiler.lir.amd64.AMD64BreakpointOp;
@@ -553,19 +555,27 @@ public class SubstrateAMD64Backend extends SubstrateBackend implements LIRGenera
             super(compilationId, lir, frameMapBuilder, registerAllocationConfig, callingConvention);
             this.method = method;
 
-            if (method.hasCalleeSavedRegisters()) {
+            /*
+             * Besides for methods with callee saved registers, we reserve additional stack space
+             * for lazyDeoptStub too. This is necessary because the lazy deopt stub might read
+             * callee-saved register values in the callee of the function to be deoptimized, thus
+             * that stack space must not be overwritten by the lazy deopt stub.
+             */
+            if (method.hasCalleeSavedRegisters() || method.getDeoptStubType() == Deoptimizer.StubType.LazyEntryStub) {
                 AMD64CalleeSavedRegisters calleeSavedRegisters = AMD64CalleeSavedRegisters.singleton();
                 FrameMap frameMap = ((FrameMapBuilderTool) frameMapBuilder).getFrameMap();
                 int registerSaveAreaSizeInBytes = calleeSavedRegisters.getSaveAreaSize();
                 StackSlot calleeSaveArea = frameMap.allocateStackMemory(registerSaveAreaSizeInBytes, frameMap.getTarget().wordSize);
 
-                /*
-                 * The offset of the callee save area must be fixed early during image generation.
-                 * It is accessed when compiling methods that have a call with callee-saved calling
-                 * convention. Here we verify that offset computed earlier is the same as the offset
-                 * actually reserved.
-                 */
-                calleeSavedRegisters.verifySaveAreaOffsetInFrame(calleeSaveArea.getRawOffset());
+                if (method.hasCalleeSavedRegisters()) {
+                    /*
+                     * The offset of the callee save area must be fixed early during image
+                     * generation. It is accessed when compiling methods that have a call with
+                     * callee-saved calling convention. Here we verify that offset computed earlier
+                     * is the same as the offset actually reserved.
+                     */
+                    calleeSavedRegisters.verifySaveAreaOffsetInFrame(calleeSaveArea.getRawOffset());
+                }
             }
 
             if (method.canDeoptimize() || method.isDeoptTarget()) {
@@ -830,8 +840,8 @@ public class SubstrateAMD64Backend extends SubstrateBackend implements LIRGenera
         }
 
         @Override
-        protected void emitRangeTableSwitch(int lowKey, LabelRef defaultTarget, LabelRef[] targets, AllocatableValue key) {
-            super.emitRangeTableSwitch(lowKey, defaultTarget, targets, key);
+        protected void emitRangeTableSwitch(int lowKey, LabelRef defaultTarget, LabelRef[] targets, SwitchStrategy remainingStrategy, LabelRef[] remainingTargets, AllocatableValue key) {
+            super.emitRangeTableSwitch(lowKey, defaultTarget, targets, remainingStrategy, remainingTargets, key);
             markIndirectBranchTargets(targets);
         }
 
@@ -1325,8 +1335,8 @@ public class SubstrateAMD64Backend extends SubstrateBackend implements LIRGenera
     }
 
     /**
-     * Generates the prolog of a {@link com.oracle.svm.core.deopt.Deoptimizer.StubType#EntryStub}
-     * method.
+     * Generates the prolog of a
+     * {@link com.oracle.svm.core.deopt.Deoptimizer.StubType#EagerEntryStub} method.
      */
     protected static class DeoptEntryStubContext extends SubstrateAMD64FrameContext {
         protected DeoptEntryStubContext(SharedMethod method, CallingConvention callingConvention) {
@@ -1365,7 +1375,7 @@ public class SubstrateAMD64Backend extends SubstrateBackend implements LIRGenera
      * method.
      *
      * Note no special handling is necessary for CFI as this will be a direct call from the
-     * {@link com.oracle.svm.core.deopt.Deoptimizer.StubType#EntryStub}.
+     * {@link com.oracle.svm.core.deopt.Deoptimizer.StubType#EagerEntryStub}.
      */
     protected static class DeoptExitStubContext extends SubstrateAMD64FrameContext {
         protected DeoptExitStubContext(SharedMethod method, CallingConvention callingConvention) {
@@ -1705,10 +1715,24 @@ public class SubstrateAMD64Backend extends SubstrateBackend implements LIRGenera
     @Override
     public LIRGenerationResult newLIRGenerationResult(CompilationIdentifier compilationId, LIR lir, RegisterAllocationConfig registerAllocationConfig, StructuredGraph graph, Object stub) {
         SharedMethod method = (SharedMethod) graph.method();
+
         SubstrateCallingConventionKind ccKind = method.getCallingConventionKind();
         SubstrateCallingConventionType ccType = ccKind.isCustom() ? method.getCustomCallingConventionType() : ccKind.toType(false);
         CallingConvention callingConvention = CodeUtil.getCallingConvention(getCodeCache(), ccType, method, this);
-        return new SubstrateLIRGenerationResult(compilationId, lir, newFrameMapBuilder(registerAllocationConfig.getRegisterConfig(), method), callingConvention, registerAllocationConfig, method);
+        LIRGenerationResult lirGenerationResult = new SubstrateLIRGenerationResult(compilationId, lir, newFrameMapBuilder(registerAllocationConfig.getRegisterConfig(), method), callingConvention,
+                        registerAllocationConfig, method);
+
+        FrameMap frameMap = ((FrameMapBuilderTool) lirGenerationResult.getFrameMapBuilder()).getFrameMap();
+        Deoptimizer.StubType stubType = method.getDeoptStubType();
+        if (stubType == Deoptimizer.StubType.InterpreterEnterStub) {
+            assert InterpreterSupport.isEnabled();
+            frameMap.reserveOutgoing(AMD64InterpreterStubs.additionalFrameSizeEnterStub());
+        } else if (stubType == Deoptimizer.StubType.InterpreterLeaveStub) {
+            assert InterpreterSupport.isEnabled();
+            frameMap.reserveOutgoing(AMD64InterpreterStubs.additionalFrameSizeLeaveStub());
+        }
+
+        return lirGenerationResult;
     }
 
     protected AMD64ArithmeticLIRGenerator createArithmeticLIRGen(RegisterValue nullRegisterValue) {
@@ -1795,11 +1819,18 @@ public class SubstrateAMD64Backend extends SubstrateBackend implements LIRGenera
     }
 
     protected FrameContext createFrameContext(SharedMethod method, Deoptimizer.StubType stubType, CallingConvention callingConvention) {
-        if (stubType == Deoptimizer.StubType.EntryStub) {
+        if (stubType == Deoptimizer.StubType.EagerEntryStub || stubType == Deoptimizer.StubType.LazyEntryStub) {
             return new DeoptEntryStubContext(method, callingConvention);
         } else if (stubType == Deoptimizer.StubType.ExitStub) {
             return new DeoptExitStubContext(method, callingConvention);
+        } else if (stubType == Deoptimizer.StubType.InterpreterEnterStub) {
+            assert InterpreterSupport.isEnabled();
+            return new AMD64InterpreterStubs.InterpreterEnterStubContext(method, callingConvention);
+        } else if (stubType == Deoptimizer.StubType.InterpreterLeaveStub) {
+            assert InterpreterSupport.isEnabled();
+            return new AMD64InterpreterStubs.InterpreterLeaveStubContext(method, callingConvention);
         }
+
         return new SubstrateAMD64FrameContext(method, callingConvention);
     }
 

@@ -22,8 +22,9 @@
  */
 package com.oracle.truffle.espresso.bytecode;
 
-import com.oracle.truffle.espresso.impl.Klass;
-import com.oracle.truffle.espresso.meta.EspressoError;
+import java.io.PrintStream;
+import java.util.Arrays;
+
 import com.oracle.truffle.espresso.classfile.ConstantPool;
 import com.oracle.truffle.espresso.classfile.bytecode.BytecodeLookupSwitch;
 import com.oracle.truffle.espresso.classfile.bytecode.BytecodeStream;
@@ -32,9 +33,8 @@ import com.oracle.truffle.espresso.classfile.bytecode.Bytecodes;
 import com.oracle.truffle.espresso.classfile.constantpool.ClassConstant;
 import com.oracle.truffle.espresso.classfile.constantpool.InvokeDynamicConstant;
 import com.oracle.truffle.espresso.classfile.constantpool.MethodRefConstant;
-
-import java.io.PrintStream;
-import java.util.Arrays;
+import com.oracle.truffle.espresso.impl.Klass;
+import com.oracle.truffle.espresso.meta.EspressoError;
 
 public class BytecodePrinter {
 
@@ -57,17 +57,17 @@ public class BytecodePrinter {
                 } else if (opcode == Bytecodes.NEW) {
                     // {bci}: new {class name}
                     int cpi = stream.readCPI(bci);
-                    ClassConstant cc = (ClassConstant) pool.at(cpi);
+                    ClassConstant.ImmutableClassConstant cc = (ClassConstant.ImmutableClassConstant) pool.at(cpi);
                     str.append(cc.getName(pool));
                 } else if (opcode == Bytecodes.INVOKEDYNAMIC) {
                     // {bci}: #{bootstrap method index} -> {name}:{signature}
                     int cpi = stream.readCPI(bci);
-                    InvokeDynamicConstant idc = (InvokeDynamicConstant) pool.at(cpi);
+                    InvokeDynamicConstant.Indexes idc = (InvokeDynamicConstant.Indexes) pool.at(cpi);
                     str.append("#").append(idc.getBootstrapMethodAttrIndex()).append(" -> ").append(idc.getName(pool)).append(":").append(idc.getSignature(pool));
                 } else if (Bytecodes.isInvoke(opcode)) {
                     // {bci}: invoke{} {class}.{method name}:{method signature}
                     int cpi = stream.readCPI(bci);
-                    MethodRefConstant mrc = (MethodRefConstant) pool.at(cpi);
+                    MethodRefConstant.Indexes mrc = (MethodRefConstant.Indexes) pool.at(cpi);
                     str.append(mrc.getHolderKlassName(pool)).append(".").append(mrc.getName(pool)).append(":").append(mrc.getDescriptor(pool));
                 } else if (opcode == Bytecodes.TABLESWITCH) {
                     // @formatter:off

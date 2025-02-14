@@ -294,7 +294,7 @@ class SubstrateInspectedFrame implements InspectedFrame {
 
     private VirtualFrame lookupVirtualFrame() {
         IsolateThread thread = CurrentIsolate.getCurrentThread();
-        DeoptimizedFrame deoptimizedFrame = Deoptimizer.checkDeoptimized(thread, sp);
+        DeoptimizedFrame deoptimizedFrame = Deoptimizer.checkEagerDeoptimized(thread, sp);
         if (deoptimizedFrame != null) {
             /*
              * Find the matching inlined frame, by skipping over the virtual frames that were
@@ -314,8 +314,8 @@ class SubstrateInspectedFrame implements InspectedFrame {
     public void materializeVirtualObjects(boolean invalidateCode) {
         IsolateThread thread = CurrentIsolate.getCurrentThread();
         if (virtualFrame == null) {
-            DeoptimizedFrame deoptimizedFrame = getDeoptimizer().deoptSourceFrame(ip, false);
-            assert deoptimizedFrame == Deoptimizer.checkDeoptimized(thread, sp);
+            DeoptimizedFrame deoptimizedFrame = getDeoptimizer().deoptSourceFrameEagerly(ip, false);
+            assert deoptimizedFrame == Deoptimizer.checkEagerDeoptimized(thread, sp);
         }
 
         if (invalidateCode) {
@@ -375,7 +375,7 @@ class SubstrateInspectedFrame implements InspectedFrame {
         for (int i = 0; i < frameInfo.getNumLocals(); i++) {
             JavaConstant con = getLocalConstant(i);
             if (con.getJavaKind() != JavaKind.Illegal) {
-                result.append("\n    local ").append(i);
+                result.append(System.lineSeparator()).append("    local ").append(i);
                 if (con.getJavaKind() == JavaKind.Object) {
                     if (isVirtual(i)) {
                         result.append("  [virtual object]");

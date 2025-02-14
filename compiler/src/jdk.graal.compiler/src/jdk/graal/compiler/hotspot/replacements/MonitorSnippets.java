@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -94,9 +94,9 @@ import static jdk.graal.compiler.nodes.extended.MembarNode.memoryBarrier;
 import static jdk.graal.compiler.replacements.SnippetTemplate.DEFAULT_REPLACER;
 import static jdk.graal.compiler.replacements.nodes.CStringConstant.cstring;
 import static org.graalvm.word.LocationIdentity.any;
-import static org.graalvm.word.WordFactory.nullPointer;
-import static org.graalvm.word.WordFactory.unsigned;
-import static org.graalvm.word.WordFactory.zero;
+import static jdk.graal.compiler.word.Word.nullPointer;
+import static jdk.graal.compiler.word.Word.unsigned;
+import static jdk.graal.compiler.word.Word.zero;
 
 import java.util.List;
 import java.util.Objects;
@@ -104,7 +104,6 @@ import java.util.Objects;
 import org.graalvm.word.LocationIdentity;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.WordBase;
-import org.graalvm.word.WordFactory;
 
 import jdk.graal.compiler.api.replacements.Fold;
 import jdk.graal.compiler.api.replacements.Snippet;
@@ -200,7 +199,7 @@ import jdk.vm.ci.meta.ResolvedJavaType;
  * appropriately to comply with the layouts above.
  */
 // @formatter:off
-@SyncPort(from = "https://github.com/openjdk/jdk/blob/c113f82f78c7d9be1ac297aebfeb6051f0f904fb/src/hotspot/cpu/x86/c2_MacroAssembler_x86.cpp#L175-L499",
+@SyncPort(from = "https://github.com/openjdk/jdk/blob/98a93e115137a305aed6b7dbf1d4a7d5906fe77c/src/hotspot/cpu/x86/c2_MacroAssembler_x86.cpp#L174-L498",
           sha1 = "7bf54a5cd262e46c33067da8674032974e80af08")
 // @formatter:on
 public class MonitorSnippets implements Snippets {
@@ -241,7 +240,7 @@ public class MonitorSnippets implements Snippets {
         incCounter();
 
         if (diagnoseSyncOnValueBasedClasses(INJECTED_VMCONFIG)) {
-            int flags = shouldUseKlassMiscFlags() ? hub.readInt(klassMiscFlagsOffset(INJECTED_VMCONFIG), KLASS_MISC_FLAGS_LOCATION)
+            int flags = shouldUseKlassMiscFlags() ? hub.readByte(klassMiscFlagsOffset(INJECTED_VMCONFIG), KLASS_MISC_FLAGS_LOCATION)
                             : hub.readInt(klassAccessFlagsOffset(INJECTED_VMCONFIG), KLASS_ACCESS_FLAGS_LOCATION);
             if (probability(SLOW_PATH_PROBABILITY, (flags & jvmAccIsValueBasedClass(INJECTED_VMCONFIG)) != 0)) {
                 monitorenterStubC(MONITORENTER, object, lock);
@@ -358,7 +357,7 @@ public class MonitorSnippets implements Snippets {
         if (probability(SLOW_PATH_PROBABILITY, mark.and(monitorValue(INJECTED_VMCONFIG)).notEqual(0))) {
             // Inflated case
             // Set the lock slot's displaced mark to unused. Any non-0 value suffices.
-            lock.writeWord(lockMetadataOffset(INJECTED_VMCONFIG), WordFactory.unsigned(unusedMark(INJECTED_VMCONFIG)), BASICLOCK_METADATA_LOCATION);
+            lock.writeWord(lockMetadataOffset(INJECTED_VMCONFIG), Word.unsigned(unusedMark(INJECTED_VMCONFIG)), BASICLOCK_METADATA_LOCATION);
             return tryEnterInflated(object, lock, mark, thread, trace, counters);
         }
 
@@ -414,16 +413,16 @@ public class MonitorSnippets implements Snippets {
     }
 
     // @formatter:off
-    @SyncPort(from = "https://github.com/openjdk/jdk/blob/c113f82f78c7d9be1ac297aebfeb6051f0f904fb/src/hotspot/cpu/x86/c2_MacroAssembler_x86.cpp#L501-L667",
+    @SyncPort(from = "https://github.com/openjdk/jdk/blob/98a93e115137a305aed6b7dbf1d4a7d5906fe77c/src/hotspot/cpu/x86/c2_MacroAssembler_x86.cpp#L500-L666",
               sha1 = "1c396a67926e92a2cbc64c27fe667142e9ec157d")
     // @formatter:on
     @SuppressWarnings("unused")
     private static boolean tryLightweightLocking(Object object, Word lock, Word mark, Word thread, boolean trace, Counters counters, Register stackPointerRegister) {
-        writeMonitorCache(lock, WordFactory.nullPointer());
+        writeMonitorCache(lock, Word.nullPointer());
         // Prefetch top
         // We assume `lockStackTop' is always positive and use `WordFactory.unsigned' to skip a sign
         // extension.
-        Word lockStackTop = WordFactory.unsigned(thread.readInt(javaThreadLockStackTopOffset(INJECTED_VMCONFIG), JAVA_THREAD_LOCK_STACK_TOP_LOCATION));
+        Word lockStackTop = Word.unsigned(thread.readInt(javaThreadLockStackTopOffset(INJECTED_VMCONFIG), JAVA_THREAD_LOCK_STACK_TOP_LOCATION));
 
         if (probability(SLOW_PATH_PROBABILITY, mark.and(monitorValue(INJECTED_VMCONFIG)).notEqual(0))) {
             // Inflated case
@@ -444,7 +443,7 @@ public class MonitorSnippets implements Snippets {
         if (probability(FAST_PATH_PROBABILITY, tryLightweightLockingHelper(object, objectPointer, mark, thread, trace, counters, lockStackTop))) {
             if (useObjectMonitorTable(INJECTED_VMCONFIG)) {
                 // Need to reload top, clobbered by CAS.
-                lockStackTop = WordFactory.unsigned(thread.readInt(javaThreadLockStackTopOffset(INJECTED_VMCONFIG), JAVA_THREAD_LOCK_STACK_TOP_LOCATION));
+                lockStackTop = Word.unsigned(thread.readInt(javaThreadLockStackTopOffset(INJECTED_VMCONFIG), JAVA_THREAD_LOCK_STACK_TOP_LOCATION));
             }
             // Push object to lock-stack.
             // Here we don't re-read LockStack::_top as it is thread-local data.
@@ -544,12 +543,12 @@ public class MonitorSnippets implements Snippets {
     }
 
     // @formatter:off
-    @SyncPort(from = "https://github.com/openjdk/jdk/blob/78b80150e009745b8f28d36c3836f18ad0ca921f/src/hotspot/cpu/x86/c2_MacroAssembler_x86.cpp#L669-L838",
+    @SyncPort(from = "https://github.com/openjdk/jdk/blob/98a93e115137a305aed6b7dbf1d4a7d5906fe77c/src/hotspot/cpu/x86/c2_MacroAssembler_x86.cpp#L668-L837",
               sha1 = "34c70e9dd2d3093e82189a25c056e7fdb1aff506")
     // @formatter:on
     private static boolean tryLightweightUnlocking(Object object, Word thread, Word lock, boolean trace, Counters counters) {
         // Load top
-        Word lockStackTop = WordFactory.unsigned(thread.readInt(javaThreadLockStackTopOffset(INJECTED_VMCONFIG), JAVA_THREAD_LOCK_STACK_TOP_LOCATION));
+        Word lockStackTop = Word.unsigned(thread.readInt(javaThreadLockStackTopOffset(INJECTED_VMCONFIG), JAVA_THREAD_LOCK_STACK_TOP_LOCATION));
         Word newLockStackTop = lockStackTop.add(-wordSize());
 
         // Prefetch mark
@@ -572,7 +571,7 @@ public class MonitorSnippets implements Snippets {
 
         // Pop lock-stack.
         if (isCAssertEnabled(INJECTED_VMCONFIG)) {
-            thread.writeWord(newLockStackTop, WordFactory.zero(), JAVA_THREAD_LOCK_STACK_LOCATION);
+            thread.writeWord(newLockStackTop, Word.zero(), JAVA_THREAD_LOCK_STACK_LOCATION);
         }
         thread.writeInt(javaThreadLockStackTopOffset(INJECTED_VMCONFIG), (int) newLockStackTop.rawValue(), JAVA_THREAD_LOCK_STACK_TOP_LOCATION);
 
@@ -586,7 +585,7 @@ public class MonitorSnippets implements Snippets {
         // We elide the monitor check, let the CAS fail instead.
 
         // Try to unlock. Transition lock bits 0b00 => 0b01
-        Word markLocked = mark.and(WordFactory.unsigned(~markWordLockMaskInPlace(INJECTED_VMCONFIG)));
+        Word markLocked = mark.and(Word.unsigned(~markWordLockMaskInPlace(INJECTED_VMCONFIG)));
         Word markUnlocked = mark.or(unlockedValue(INJECTED_VMCONFIG));
         if (probability(FAST_PATH_PROBABILITY, objectPointer.logicCompareAndSwapWord(markOffset(INJECTED_VMCONFIG), markLocked, markUnlocked, MARK_WORD_LOCATION))) {
             traceObject(trace, "-lock{lightweight:cas}", object, false);

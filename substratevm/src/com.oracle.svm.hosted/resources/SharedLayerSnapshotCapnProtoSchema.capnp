@@ -1,6 +1,6 @@
 @0x9eb32e19f86ee174;
 using Java = import "/capnp/java.capnp";
-$Java.package("com.oracle.graal.pointsto.heap");
+$Java.package("com.oracle.svm.hosted.imagelayer");
 $Java.outerClassname("SharedLayerSnapshotCapnProtoSchemaHolder");
 
 using TypeId = Int32;
@@ -36,16 +36,19 @@ struct PersistedAnalysisType {
   staticFieldIds @22 :List(FieldId);
   annotationList @23 :List(Annotation);
   classInitializationInfo @24 :ClassInitializationInfo;
+  hasArrayType @25 :Bool;
+  subTypes @26 :List(TypeId);
+  isAnySubtypeInstantiated @27 :Bool;
   wrappedType :union {
-    none @25 :Void; # default
+    none @28 :Void; # default
     serializationGenerated :group {
-      rawDeclaringClass @26 :Text;
-      rawTargetConstructor @27 :Text;
+      rawDeclaringClass @29 :Text;
+      rawTargetConstructor @30 :Text;
     }
     lambda :group {
-      capturingClass @28 :Text;
+      capturingClass @31 :Text;
     }
-    proxyType @29 :Void;
+    proxyType @32 :Void;
   }
 }
 
@@ -85,32 +88,33 @@ struct PersistedAnalysisMethod {
   methodHandleIntrinsicName @19 :Text;
   annotationList @20 :List(Annotation);
   isVarArgs @21 :Bool;
-  analysisGraphLocation @22 :Text;
-  analysisGraphIsIntrinsic @23 :Bool;
-  strengthenedGraphLocation @24 :Text;
+  isBridge @22 :Bool;
+  analysisGraphLocation @23 :Text;
+  analysisGraphIsIntrinsic @24 :Bool;
+  strengthenedGraphLocation @25 :Text;
   wrappedMethod :union {
-    none @25 :Void; # default
+    none @26 :Void; # default
     factoryMethod :group {
-      targetConstructorId @26 :MethodId;
-      throwAllocatedObject @27 :Bool;
-      instantiatedTypeId @28 :TypeId;
+      targetConstructorId @27 :MethodId;
+      throwAllocatedObject @28 :Bool;
+      instantiatedTypeId @29 :TypeId;
     }
     outlinedSB :group {
-      methodTypeReturn @29 :Text;
-      methodTypeParameters @30 :List(Text);
+      methodTypeReturn @30 :Text;
+      methodTypeParameters @31 :List(Text);
     }
     cEntryPointCallStub :group {
-      originalMethodId @31 :MethodId;
-      notPublished @32 :Bool;
+      originalMethodId @32 :MethodId;
+      notPublished @33 :Bool;
     }
     wrappedMember :group {
       union {
-        reflectionExpandSignature @33 :Void;
-        javaCallVariantWrapper @34 :Void;
+        reflectionExpandSignature @34 :Void;
+        javaCallVariantWrapper @35 :Void;
       }
-      name @35 :Text;
-      declaringClassName @36 :Text;
-      argumentTypeNames @37 :List(Text);
+      name @36 :Text;
+      declaringClassName @37 :Text;
+      argumentTypeNames @38 :List(Text);
     }
   }
 }
@@ -132,7 +136,6 @@ struct PersistedAnalysisField {
   isSynthetic @13 :Bool;
   annotationList @14 :List(Annotation);
   name @15 :Text;
-  fieldCheckIndex @16 :Int32;
 }
 
 struct CEntryPointLiteralReference {
@@ -208,6 +211,7 @@ struct ImageSingletonKey {
   keyClassName @0 :Text;
   persistFlag @1 :Int32;
   objectId @2 :SingletonObjId;
+  constantId @3 :ConstantId;
 }
 
 struct ImageSingletonObject {
@@ -255,6 +259,16 @@ struct SharedLayerSnapshot {
   singletonKeys @11 :List(ImageSingletonKey);
   singletonObjects @12 :List(ImageSingletonObject);
   fields @13 :List(PersistedAnalysisField);
+  nextLayerNumber @14 :Int32;
+  staticFinalFieldFoldingSingleton @15 :StaticFinalFieldFoldingSingleton;
+}
+
+struct StaticFinalFieldFoldingSingleton {
+  fields @0 :List(FieldId);
+  fieldCheckIndexes @1 :List(Int32);
+  fieldInitializationStatusList @2 :List(Bool);
+  bytecodeParsedFoldedFieldValues @3 :List(ConstantReference);
+  afterParsingHooksDoneFoldedFieldValues @4 :List(ConstantReference);
 }
 
 struct PrimitiveValue {

@@ -37,7 +37,6 @@ import com.oracle.graal.pointsto.PointsToAnalysis;
 import com.oracle.graal.pointsto.constraints.UnsupportedFeatures;
 import com.oracle.graal.pointsto.flow.MethodFlowsGraph;
 import com.oracle.graal.pointsto.flow.MethodTypeFlowBuilder;
-import com.oracle.graal.pointsto.infrastructure.OriginalFieldProvider;
 import com.oracle.graal.pointsto.meta.AnalysisField;
 import com.oracle.graal.pointsto.meta.AnalysisMetaAccess;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
@@ -51,8 +50,10 @@ import com.oracle.svm.hosted.SVMHost;
 import com.oracle.svm.hosted.ameta.CustomTypeFieldHandler;
 import com.oracle.svm.hosted.classinitialization.ClassInitializationSupport;
 import com.oracle.svm.hosted.code.IncompatibleClassChangeFallbackMethod;
+import com.oracle.svm.hosted.imagelayer.HostedImageLayerBuildingSupport;
 import com.oracle.svm.hosted.meta.HostedType;
 import com.oracle.svm.hosted.substitute.AnnotationSubstitutionProcessor;
+import com.oracle.svm.util.LogUtils;
 
 import jdk.graal.compiler.api.replacements.SnippetReflectionProvider;
 import jdk.graal.compiler.debug.DebugContext;
@@ -145,7 +146,11 @@ public class NativeImagePointsToAnalysis extends PointsToAnalysis implements Inf
                  * avoid deadlocks, the hub needs to be rescanned manually after the metadata is
                  * initialized.
                  */
-                universe.getImageLayerLoader().rescanHub(type, ((SVMHost) hostVM).dynamicHub(type));
+                HostedImageLayerBuildingSupport.singleton().getLoader().rescanHub(type, ((SVMHost) hostVM).dynamicHub(type));
+            }
+            if (type.isArray() && type.getComponentType().isInBaseLayer()) {
+                /* Rescan the component hub. This will be simplified by GR-60254. */
+                HostedImageLayerBuildingSupport.singleton().getLoader().rescanHub(type.getComponentType(), ((SVMHost) hostVM).dynamicHub(type).getComponentHub());
             }
             if (SubstrateOptions.includeAll()) {
                 /*
@@ -154,9 +159,8 @@ public class NativeImagePointsToAnalysis extends PointsToAnalysis implements Inf
                  */
                 Stream.concat(Arrays.stream(getOrDefault(type, t -> t.getInstanceFields(true), new AnalysisField[0])),
                                 Arrays.stream(getOrDefault(type, AnalysisType::getStaticFields, new AnalysisField[0])))
-                                .map(OriginalFieldProvider::getJavaField)
-                                .filter(field -> field != null && classInclusionPolicy.isFieldIncluded(field))
-                                .forEach(classInclusionPolicy::includeField);
+                                .filter(field -> field != null && classInclusionPolicy.isFieldIncluded((AnalysisField) field))
+                                .forEach(field -> classInclusionPolicy.includeField((AnalysisField) field));
 
                 /*
                  * Only the class initializers that are executed at run time should be included in
@@ -182,6 +186,15 @@ public class NativeImagePointsToAnalysis extends PointsToAnalysis implements Inf
             return ((HostedType) type).getWrapped().getWrapped();
         } else {
             return type;
+        }
+    }
+
+    @Override
+    protected void validateRootMethodRegistration(AnalysisMethod aMethod, boolean invokeSpecial) {
+        super.validateRootMethodRegistration(aMethod, invokeSpecial);
+
+        if (!invokeSpecial && aMethod.isConstructor()) {
+            LogUtils.warning("Constructors should be registered as special invoke entry points: %s", aMethod);
         }
     }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -48,12 +48,12 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.function.Function;
 
 import org.graalvm.collections.EconomicMap;
 import org.graalvm.polyglot.io.ByteSequence;
 import org.graalvm.wasm.EmbedderDataHolder;
 import org.graalvm.wasm.ImportDescriptor;
+import org.graalvm.wasm.ImportValueSupplier;
 import org.graalvm.wasm.WasmConstant;
 import org.graalvm.wasm.WasmContext;
 import org.graalvm.wasm.WasmCustomSection;
@@ -61,7 +61,6 @@ import org.graalvm.wasm.WasmFunction;
 import org.graalvm.wasm.WasmFunctionInstance;
 import org.graalvm.wasm.WasmInstance;
 import org.graalvm.wasm.WasmLanguage;
-import org.graalvm.wasm.WasmMath;
 import org.graalvm.wasm.WasmModule;
 import org.graalvm.wasm.WasmTable;
 import org.graalvm.wasm.WasmType;
@@ -74,6 +73,7 @@ import org.graalvm.wasm.globals.ExportedWasmGlobal;
 import org.graalvm.wasm.globals.WasmGlobal;
 import org.graalvm.wasm.memory.WasmMemory;
 import org.graalvm.wasm.memory.WasmMemoryFactory;
+import org.graalvm.wasm.memory.WasmMemoryLibrary;
 
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerAsserts;
@@ -157,7 +157,7 @@ public class WebAssembly extends Dictionary {
         return context.readInstance(module);
     }
 
-    private static Function<ImportDescriptor, Object> resolveModuleImports(WasmModule module, WasmContext context, Object importObject) {
+    private static ImportValueSupplier resolveModuleImports(WasmModule module, WasmContext context, Object importObject) {
         CompilerAsserts.neverPartOfCompilation();
         List<Object> resolvedImports = new ArrayList<>(module.numImportedSymbols());
 
@@ -181,7 +181,14 @@ public class WebAssembly extends Dictionary {
         }
 
         assert resolvedImports.size() == module.numImportedSymbols();
-        return importDesc -> resolvedImports.get(importDesc.importedSymbolIndex());
+        return (importDesc, instance) -> {
+            // Import values are only valid in the module where they were resolved.
+            if (instance.module() == module) {
+                return resolvedImports.get(importDesc.importedSymbolIndex());
+            } else {
+                return null;
+            }
+        };
     }
 
     private static Object requireImportObject(Object importObject) {
@@ -259,8 +266,8 @@ public class WebAssembly extends Dictionary {
 
     private WasmModuleWithSource moduleDecodeImpl(byte[] data) {
         String moduleName = makeModuleName(data);
-        Source source = Source.newBuilder(WasmLanguage.ID, ByteSequence.create(data), moduleName).build();
-        CallTarget parseResult = currentContext.environment().parsePublic(source, WasmLanguage.PARSE_JS_MODULE_ARGS);
+        Source source = Source.newBuilder(WasmLanguage.ID, ByteSequence.create(data), moduleName).mimeType(WasmLanguage.WASM_MIME_TYPE).build();
+        CallTarget parseResult = currentContext.environment().parsePublic(source);
         WasmModule module = WasmLanguage.getParsedModule(parseResult);
         assert module.limits().equals(JsConstants.JS_LIMITS);
         return new WasmModuleWithSource(module, source);
@@ -332,9 +339,17 @@ public class WebAssembly extends Dictionary {
         return (cause == null) ? new WasmJsApiException(kind, message) : new WasmJsApiException(kind, message, cause);
     }
 
+    /**
+     * Extract a {@link WasmModule} from argument 0. The argument may be a {@link WasmModule} or a
+     * {@link WasmModuleWithSource} as produced by the CallTarget returned from Env.parse or
+     * {@link #moduleDecode}, respectively.
+     */
     private static WasmModule toModule(Object[] args) {
         checkArgumentCount(args, 1);
-        if (args[0] instanceof WasmModuleWithSource moduleObject) {
+        Object arg0 = args[0];
+        if (arg0 instanceof WasmModule moduleObject) {
+            return moduleObject;
+        } else if (arg0 instanceof WasmModuleWithSource moduleObject) {
             return moduleObject.module();
         } else {
             throw new WasmJsApiException(WasmJsApiException.Kind.TypeError, "First argument must be wasm module");
@@ -532,7 +547,7 @@ public class WebAssembly extends Dictionary {
         if (!refTypes && elemKind == TableKind.externref) {
             throw new WasmJsApiException(WasmJsApiException.Kind.TypeError, "Element type must be anyfunc. Enable reference types to support externref");
         }
-        final int maxAllowedSize = WasmMath.minUnsigned(maximum, JS_LIMITS.tableInstanceSizeLimit());
+        final int maxAllowedSize = minUnsigned(maximum, JS_LIMITS.tableInstanceSizeLimit());
         return new WasmTable(initial, maximum, maxAllowedSize, elemKind.byteValue(), initialValue);
     }
 
@@ -706,14 +721,15 @@ public class WebAssembly extends Dictionary {
     }
 
     public static WasmMemory memAlloc(int initial, int maximum, boolean shared) {
+        final WasmContext context = WasmContext.get(null);
+        boolean useUnsafeMemory = context.getContextOptions().useUnsafeMemory();
+        boolean directByteBufferMemoryAccess = context.getContextOptions().directByteBufferMemoryAccess();
         if (compareUnsigned(initial, maximum) > 0) {
             throw new WasmJsApiException(WasmJsApiException.Kind.RangeError, "Min memory size exceeds max memory size");
-        } else if (Long.compareUnsigned(initial, JS_LIMITS.memoryInstanceSizeLimit()) > 0) {
+        } else if (Long.compareUnsigned(initial, WasmMemoryFactory.getMaximumAllowedSize(shared, useUnsafeMemory, directByteBufferMemoryAccess)) > 0) {
             throw new WasmJsApiException(WasmJsApiException.Kind.RangeError, "Min memory size exceeds implementation limit");
         }
-        final long maxAllowedSize = minUnsigned(maximum, JS_LIMITS.memoryInstanceSizeLimit());
-        final WasmContext context = WasmContext.get(null);
-        return WasmMemoryFactory.createMemory(initial, maximum, maxAllowedSize, false, shared, context.getContextOptions().useUnsafeMemory());
+        return WasmMemoryFactory.createMemory(initial, maximum, false, shared, useUnsafeMemory, directByteBufferMemoryAccess);
     }
 
     private static Object memGrow(Object[] args) {
@@ -730,9 +746,11 @@ public class WebAssembly extends Dictionary {
     }
 
     public static long memGrow(WasmMemory memory, int delta) {
-        final long previousSize = memory.grow(delta);
+        WasmMemoryLibrary memoryLib = WasmMemoryLibrary.getUncached();
+        final long previousSize = memoryLib.grow(memory, delta);
         if (previousSize == -1) {
-            throw new WasmJsApiException(WasmJsApiException.Kind.RangeError, "Cannot grow memory above max limit");
+            throw new WasmJsApiException(WasmJsApiException.Kind.RangeError,
+                            Math.addExact(memoryLib.size(memory), delta) <= memory.declaredMaxSize() ? "Cannot grow memory above implementation limit" : "Cannot grow memory above max limit");
         }
         return previousSize;
     }
@@ -855,14 +873,17 @@ public class WebAssembly extends Dictionary {
 
     private static Object memAsByteBuffer(Object[] args) {
         checkArgumentCount(args, 1);
-        if (args[0] instanceof WasmMemory) {
-            WasmMemory memory = (WasmMemory) args[0];
-            ByteBuffer buffer = memory.asByteBuffer();
+        if (args[0] instanceof WasmMemory memory) {
+            ByteBuffer buffer = memAsByteBuffer(memory);
             if (buffer != null) {
                 return WasmContext.get(null).environment().asGuestValue(buffer);
             }
         }
         return WasmConstant.VOID;
+    }
+
+    public static ByteBuffer memAsByteBuffer(WasmMemory memory) {
+        return WasmMemoryLibrary.getUncached().asByteBuffer(memory);
     }
 
     private Object globalAlloc(Object[] args) {

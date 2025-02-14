@@ -20,7 +20,6 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-
 package com.oracle.truffle.espresso.impl;
 
 import static com.oracle.truffle.espresso.runtime.staticobject.StaticObject.CLASS_TO_STATIC;
@@ -30,7 +29,6 @@ import java.lang.reflect.Modifier;
 import java.util.Comparator;
 import java.util.function.IntFunction;
 
-import com.oracle.truffle.espresso.jdwp.api.TagConstants;
 import org.graalvm.collections.EconomicSet;
 
 import com.oracle.truffle.api.Assumption;
@@ -63,12 +61,17 @@ import com.oracle.truffle.api.utilities.TriState;
 import com.oracle.truffle.espresso.EspressoLanguage;
 import com.oracle.truffle.espresso.classfile.ConstantPool;
 import com.oracle.truffle.espresso.classfile.Constants;
+import com.oracle.truffle.espresso.classfile.JavaKind;
 import com.oracle.truffle.espresso.classfile.descriptors.ByteSequence;
+import com.oracle.truffle.espresso.classfile.descriptors.Name;
+import com.oracle.truffle.espresso.classfile.descriptors.Signature;
 import com.oracle.truffle.espresso.classfile.descriptors.Symbol;
-import com.oracle.truffle.espresso.classfile.descriptors.Symbol.Name;
-import com.oracle.truffle.espresso.classfile.descriptors.Symbol.Signature;
-import com.oracle.truffle.espresso.classfile.descriptors.Symbol.Type;
-import com.oracle.truffle.espresso.classfile.descriptors.Types;
+import com.oracle.truffle.espresso.classfile.descriptors.Type;
+import com.oracle.truffle.espresso.classfile.descriptors.TypeSymbols;
+import com.oracle.truffle.espresso.classfile.perf.DebugCounter;
+import com.oracle.truffle.espresso.descriptors.EspressoSymbols.Names;
+import com.oracle.truffle.espresso.descriptors.EspressoSymbols.Signatures;
+import com.oracle.truffle.espresso.descriptors.EspressoSymbols.Types;
 import com.oracle.truffle.espresso.impl.ModuleTable.ModuleEntry;
 import com.oracle.truffle.espresso.impl.PackageTable.PackageEntry;
 import com.oracle.truffle.espresso.jdwp.api.ClassStatusConstants;
@@ -76,12 +79,11 @@ import com.oracle.truffle.espresso.jdwp.api.JDWPConstantPool;
 import com.oracle.truffle.espresso.jdwp.api.KlassRef;
 import com.oracle.truffle.espresso.jdwp.api.MethodRef;
 import com.oracle.truffle.espresso.jdwp.api.ModuleRef;
+import com.oracle.truffle.espresso.jdwp.api.TagConstants;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.InteropKlassesDispatch;
-import com.oracle.truffle.espresso.classfile.JavaKind;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.meta.MetaUtil;
-import com.oracle.truffle.espresso.meta.ModifiersProvider;
 import com.oracle.truffle.espresso.nodes.interop.LookupDeclaredMethod;
 import com.oracle.truffle.espresso.nodes.interop.LookupDeclaredMethodNodeGen;
 import com.oracle.truffle.espresso.nodes.interop.LookupFieldNode;
@@ -90,7 +92,6 @@ import com.oracle.truffle.espresso.nodes.interop.ToEspressoNode;
 import com.oracle.truffle.espresso.nodes.interop.ToEspressoNodeFactory;
 import com.oracle.truffle.espresso.nodes.interop.ToPrimitive;
 import com.oracle.truffle.espresso.nodes.interop.ToPrimitiveFactory;
-import com.oracle.truffle.espresso.classfile.perf.DebugCounter;
 import com.oracle.truffle.espresso.runtime.EspressoContext;
 import com.oracle.truffle.espresso.runtime.EspressoException;
 import com.oracle.truffle.espresso.runtime.EspressoFunction;
@@ -102,12 +103,13 @@ import com.oracle.truffle.espresso.runtime.dispatch.staticobject.EspressoInterop
 import com.oracle.truffle.espresso.runtime.dispatch.staticobject.InteropLookupAndInvoke;
 import com.oracle.truffle.espresso.runtime.dispatch.staticobject.InteropLookupAndInvokeFactory;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
+import com.oracle.truffle.espresso.shared.meta.TypeAccess;
 import com.oracle.truffle.espresso.substitutions.JavaType;
 import com.oracle.truffle.espresso.vm.InterpreterToVM;
 import com.oracle.truffle.espresso.vm.VM;
 
 @ExportLibrary(InteropLibrary.class)
-public abstract class Klass extends ContextAccessImpl implements ModifiersProvider, KlassRef, TruffleObject, EspressoType {
+public abstract class Klass extends ContextAccessImpl implements KlassRef, TruffleObject, EspressoType, TypeAccess<Klass, Method, Field> {
 
     // region Interop
 
@@ -377,7 +379,7 @@ public abstract class Klass extends ContextAccessImpl implements ModifiersProvid
             }
             /* Check that the class has a public constructor */
             for (Method m : receiver.getDeclaredMethods()) {
-                if (m.isPublic() && !m.isStatic() && m.getName().equals(Name._init_)) {
+                if (m.isPublic() && !m.isStatic() && m.getName().equals(Names._init_)) {
                     return true;
                 }
             }
@@ -498,7 +500,7 @@ public abstract class Klass extends ContextAccessImpl implements ModifiersProvid
             return context.getAllocator().createNewMultiArray(arrayKlass.getComponentType(), dimensions);
         }
 
-        static final String INIT_NAME = Name._init_.toString();
+        static final String INIT_NAME = Names._init_.toString();
 
         @Specialization(guards = "isObjectKlass(receiver)")
         static Object doObject(Klass receiver, Object[] arguments,
@@ -816,16 +818,8 @@ public abstract class Klass extends ContextAccessImpl implements ModifiersProvid
         if (moduleFrom == moduleTo) {
             return true;
         }
-        /*
-         * Acceptable access to a type in an unnamed module. Note that since unnamed modules can
-         * read all unnamed modules, this also handles the case where module_from is also unnamed
-         * but in a different class loader.
-         */
-        if (!moduleTo.isNamed() && (moduleFrom.canReadAllUnnamed() || moduleFrom.canRead(moduleTo, context))) {
-            return true;
-        }
         // Establish readability, check if moduleFrom is allowed to read moduleTo.
-        if (!moduleFrom.canRead(moduleTo, context)) {
+        if (!moduleFrom.canRead(moduleTo, context.isJavaBase(moduleTo))) {
             return false;
         }
         // Access is allowed if moduleTo is open, i.e. all its packages are unqualifiedly
@@ -894,7 +888,7 @@ public abstract class Klass extends ContextAccessImpl implements ModifiersProvid
     public final boolean isInterface() {
         // conflict between ModifiersProvider and KlassRef interfaces,
         // so chose the default implementation in ModifiersProvider.
-        return ModifiersProvider.super.isInterface();
+        return TypeAccess.super.isInterface();
     }
 
     /**
@@ -985,7 +979,7 @@ public abstract class Klass extends ContextAccessImpl implements ModifiersProvid
     private synchronized ArrayKlass createArrayKlass() {
         CompilerAsserts.neverPartOfCompilation();
         ArrayKlass result = this.arrayKlass;
-        if (result == null && Type._void != getType()) { // ignore void[]
+        if (result == null && Types._void != getType()) { // ignore void[]
             this.arrayKlass = result = new ArrayKlass(this);
         }
         return result;
@@ -1065,7 +1059,7 @@ public abstract class Klass extends ContextAccessImpl implements ModifiersProvid
          * never overriden default interface methods. We cirumvent this CHA limitation here by using
          * an invokespecial, which is inlinable.
          */
-        return ModifiersProvider.super.isFinalFlagSet() /* || isLeafAssumption() */;
+        return TypeAccess.super.isFinalFlagSet() /* || isLeafAssumption() */;
     }
 
     /**
@@ -1283,7 +1277,7 @@ public abstract class Klass extends ContextAccessImpl implements ModifiersProvid
      * Returns the {@code <clinit>} method for this class if there is one.
      */
     public Method getClassInitializer() {
-        Method clinit = lookupDeclaredMethod(Name._clinit_, Signature._void);
+        Method clinit = lookupDeclaredMethod(Names._clinit_, Signatures._void);
         if (clinit != null && clinit.isStatic()) {
             return clinit;
         }
@@ -1661,7 +1655,7 @@ public abstract class Klass extends ContextAccessImpl implements ModifiersProvid
     @CompilationFinal private final Symbol<Name> runtimePackage;
 
     private Symbol<Name> initRuntimePackage() {
-        ByteSequence hostPkgName = Types.getRuntimePackage(type);
+        ByteSequence hostPkgName = TypeSymbols.getRuntimePackage(type);
         return getNames().getOrCreate(hostPkgName);
     }
 
@@ -1679,6 +1673,11 @@ public abstract class Klass extends ContextAccessImpl implements ModifiersProvid
 
     public Symbol<Name> getName() {
         return name;
+    }
+
+    @Override
+    public Symbol<Name> getSymbolicName() {
+        return getName();
     }
 
     public String getExternalName() {
@@ -1800,11 +1799,6 @@ public abstract class Klass extends ContextAccessImpl implements ModifiersProvid
     }
 
     @Override
-    public KlassRef getSuperClass() {
-        return getSuperKlass();
-    }
-
-    @Override
     public byte getTagConstant() {
         return TagConstants.toTagConstant(getJavaKind());
     }
@@ -1881,4 +1875,69 @@ public abstract class Klass extends ContextAccessImpl implements ModifiersProvid
     }
 
     // endregion jdwp-specific
+
+    // region TypeAccess impl
+
+    @Override
+    public final String getJavaName() {
+        return getExternalName();
+    }
+
+    @Override
+    public final Klass getSuperClass() {
+        return getSuperKlass();
+    }
+
+    @Override
+    public final Method lookupInterfaceMethod(Symbol<Name> methodName, Symbol<Signature> methodSignature) {
+        if (this instanceof ObjectKlass) {
+            return ((ObjectKlass) this).resolveInterfaceMethod(methodName, methodSignature);
+        }
+        return null;
+    }
+
+    @Override
+    public final Method lookupInstanceMethod(Symbol<Name> methodName, Symbol<Signature> methodSignature) {
+        return lookupMethod(methodName, methodSignature, LookupMode.INSTANCE_ONLY);
+    }
+
+    @Override
+    public final Symbol<Type> getSymbolicType() {
+        return getType();
+    }
+
+    @Override
+    public final boolean hasSameDefiningClassLoader(Klass other) {
+        return getDefiningClassLoader() == other.getDefiningClassLoader();
+    }
+
+    @Override
+    public final Klass getHostType() {
+        return getHostClass();
+    }
+
+    @Override
+    public final Symbol<Name> getSymbolicRuntimePackage() {
+        return getRuntimePackage();
+    }
+
+    @Override
+    public final boolean isMagicAccessor() {
+        return getMeta().sun_reflect_MagicAccessorImpl.isAssignableFrom(this);
+    }
+
+    @Override
+    @TruffleBoundary
+    public final Klass resolveClassConstantInPool(int cpi) {
+        if (this instanceof ObjectKlass objectKlass) {
+            try {
+                return objectKlass.getConstantPool().resolvedKlassAt(objectKlass, cpi);
+            } catch (ClassCastException | IndexOutOfBoundsException e) {
+                throw new IllegalArgumentException("No ClassConstant at constant pool index " + cpi);
+            }
+        }
+        return null;
+    }
+
+    // endregion TypeAccess impl
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -32,7 +32,6 @@ import static jdk.graal.compiler.nodes.CompressionNode.CompressionOp.Compress;
 import java.lang.ref.Reference;
 
 import org.graalvm.word.LocationIdentity;
-import org.graalvm.word.WordFactory;
 
 import jdk.graal.compiler.api.replacements.Fold;
 import jdk.graal.compiler.api.replacements.Fold.InjectedParameter;
@@ -68,6 +67,7 @@ import jdk.graal.compiler.nodes.extended.LoadHubOrNullNode;
 import jdk.graal.compiler.nodes.extended.RawLoadNode;
 import jdk.graal.compiler.nodes.extended.StoreHubNode;
 import jdk.graal.compiler.nodes.memory.AddressableMemoryAccess;
+import jdk.graal.compiler.nodes.memory.ReadNode;
 import jdk.graal.compiler.nodes.memory.address.AddressNode;
 import jdk.graal.compiler.nodes.memory.address.OffsetAddressNode;
 import jdk.graal.compiler.nodes.spi.CoreProviders;
@@ -236,7 +236,20 @@ public class HotSpotReplacementsUtil {
         return config.threadExceptionPcOffset;
     }
 
-    public static final LocationIdentity TLAB_TOP_LOCATION = NamedLocationIdentity.mutable("TlabTop");
+    public static final LocationIdentity TLAB_TOP_LOCATION = new HotSpotOptimizingLocationIdentity("TlabTop", false) {
+        @Override
+        public ValueNode canonicalizeRead(ValueNode read, ValueNode object, ValueNode location, NodeView view, CoreProviders tool) {
+            // The TLAB top is always aligned to -XX:ObjectAlignment, reflect this in its stamp.
+            if (read instanceof ReadNode readNode) {
+                IntegerStamp readStamp = (IntegerStamp) readNode.stamp(view);
+                GraalHotSpotVMConfig config = ((HotSpotProviders) tool.getReplacements().getProviders()).getConfig();
+                long alignmentMask = -config.objectAlignment;
+                IntegerStamp alignedStamp = IntegerStamp.stampForMask(readStamp.getBits(), readStamp.mustBeSet(), alignmentMask);
+                readNode.setStamp(readStamp.join(alignedStamp));
+            }
+            return read;
+        }
+    };
 
     @Fold
     public static int threadTlabTopOffset(@InjectedParameter GraalHotSpotVMConfig config) {
@@ -328,8 +341,6 @@ public class HotSpotReplacementsUtil {
     public static final LocationIdentity JAVA_THREAD_CARRIER_THREAD_OBJECT_LOCATION = NamedLocationIdentity.mutable("JavaThread::_threadObj");
 
     public static final LocationIdentity JAVA_THREAD_MONITOR_OWNER_ID_LOCATION = NamedLocationIdentity.mutable("JavaThread::_monitor_owner_id");
-
-    public static final LocationIdentity JAVA_THREAD_OSTHREAD_LOCATION = NamedLocationIdentity.mutable("JavaThread::_osthread");
 
     public static final LocationIdentity JAVA_THREAD_HOLD_MONITOR_COUNT_LOCATION = NamedLocationIdentity.mutable("JavaThread::_held_monitor_count");
 
@@ -525,7 +536,7 @@ public class HotSpotReplacementsUtil {
 
     public static void initializeObjectHeader(Word memory, Word markWord, KlassPointer hub) {
         if (useCompactObjectHeaders(INJECTED_VMCONFIG)) {
-            Word compressedHub = WordFactory.unsigned(compress(Compress, hub, klassEncoding(INJECTED_VMCONFIG)).asInt());
+            Word compressedHub = Word.unsigned(compress(Compress, hub, klassEncoding(INJECTED_VMCONFIG)).asInt());
             Word hubInPlace = compressedHub.shiftLeft(markWordKlassShift(INJECTED_VMCONFIG));
             Word newMarkWord = markWord.or(hubInPlace);
             memory.writeWord(markOffset(INJECTED_VMCONFIG), newMarkWord, MARK_WORD_LOCATION);
@@ -1011,9 +1022,9 @@ public class HotSpotReplacementsUtil {
     public static final LocationIdentity HOTSPOT_JAVA_THREAD_IS_IN_TMP_VTMS_TRANSITION = NamedLocationIdentity.mutable("JavaThread::_is_in_tmp_VTMS_transition");
     public static final LocationIdentity HOTSPOT_JAVA_THREAD_IS_DISABLE_SUSPEND = NamedLocationIdentity.mutable("JavaThread::_is_disable_suspend");
     public static final LocationIdentity HOTSPOT_JAVA_LANG_THREAD_IS_IN_VTMS_TRANSITION = NamedLocationIdentity.mutable("Thread::_is_in_VTMS_transition");
-    public static final LocationIdentity HOTSPOT_JAVA_THREAD_CONT_ENTRY = NamedLocationIdentity.mutable("JavaThread::_cont_entry");
+    public static final LocationIdentity HOTSPOT_JAVA_THREAD_CONT_ENTRY_LOCATION = NamedLocationIdentity.mutable("JavaThread::_cont_entry");
 
-    public static final LocationIdentity HOTSPOT_CONTINUATION_ENTRY_PIN_COUNT = NamedLocationIdentity.mutable("ContinuationEntry::_pin_count");
+    public static final LocationIdentity HOTSPOT_CONTINUATION_ENTRY_PIN_COUNT_LOCATION = NamedLocationIdentity.mutable("ContinuationEntry::_pin_count");
 
     @Fold
     public static int layoutHelperHeaderSizeShift(@InjectedParameter GraalHotSpotVMConfig config) {
@@ -1084,7 +1095,7 @@ public class HotSpotReplacementsUtil {
 
     @Fold
     public static int threadCarrierThreadOffset(@InjectedParameter GraalHotSpotVMConfig config) {
-        return config.threadCarrierThreadObjectOffset;
+        return config.javaThreadThreadObjOffset;
     }
 
     public static boolean supportsVirtualThreadUpdateJFR(GraalHotSpotVMConfig config) {

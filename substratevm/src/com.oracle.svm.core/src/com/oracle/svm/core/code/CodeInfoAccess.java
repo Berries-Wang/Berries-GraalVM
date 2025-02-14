@@ -24,10 +24,10 @@
  */
 package com.oracle.svm.core.code;
 
+import jdk.graal.compiler.word.Word;
 import org.graalvm.nativeimage.c.function.CodePointer;
 import org.graalvm.nativeimage.c.struct.SizeOf;
 import org.graalvm.word.UnsignedWord;
-import org.graalvm.word.WordFactory;
 
 import com.oracle.svm.core.NeverInline;
 import com.oracle.svm.core.RuntimeAssertionsSupport;
@@ -155,12 +155,12 @@ public final class CodeInfoAccess {
                 return "code constants live";
             case CodeInfo.STATE_NON_ENTRANT:
                 return "non-entrant";
-            case CodeInfo.STATE_READY_FOR_INVALIDATION:
-                return "ready for invalidation";
-            case CodeInfo.STATE_INVALIDATED:
-                return "invalidated";
-            case CodeInfo.STATE_UNREACHABLE:
-                return "unreachable";
+            case CodeInfo.STATE_PENDING_REMOVAL_FROM_CODE_CACHE:
+                return "pending removal from code cache";
+            case CodeInfo.STATE_REMOVED_FROM_CODE_CACHE:
+                return "removed from code cache";
+            case CodeInfo.STATE_PENDING_FREE:
+                return "pending free";
             case CodeInfo.STATE_FREED:
                 return "invalid (freed)";
             default:
@@ -249,7 +249,7 @@ public final class CodeInfoAccess {
     }
 
     public static CodePointer absoluteIP(CodeInfo info, long relativeIP) {
-        return (CodePointer) ((UnsignedWord) cast(info).getCodeStart()).add(WordFactory.unsigned(relativeIP));
+        return (CodePointer) ((UnsignedWord) cast(info).getCodeStart()).add(Word.unsigned(relativeIP));
     }
 
     @SuppressWarnings("unchecked")

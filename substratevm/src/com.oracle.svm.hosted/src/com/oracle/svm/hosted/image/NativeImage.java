@@ -177,11 +177,12 @@ public abstract class NativeImage extends AbstractImage {
             throw shouldNotReachHere(ex);
         }
         debugInfoSize = 0;
-        String debugIdentifier = OS.getCurrent() == OS.DARWIN ? "__debug" : ".debug";
-        for (Element e : objectFile.getElements()) {
-            String name = e.getName();
-            if (name.contains(debugIdentifier) && !name.startsWith(".rela")) {
-                debugInfoSize += e.getMemSize(objectFile.getDecisionsByElement());
+        if (!OS.DARWIN.isCurrent()) { // debug info not available on Darwin
+            for (Element e : objectFile.getElements()) {
+                String name = e.getName();
+                if (name.contains(".debug") && !name.startsWith(".rela")) {
+                    debugInfoSize += e.getMemSize(objectFile.getDecisionsByElement());
+                }
             }
         }
         if (NativeImageOptions.PrintImageElementSizes.getValue()) {
@@ -317,7 +318,7 @@ public abstract class NativeImage extends AbstractImage {
 
     private void writeMethodHeader(HostedMethod m, CSourceCodeWriter writer, boolean dynamic) {
         assert Modifier.isStatic(m.getModifiers()) : "Published methods that go into the header must be static.";
-        CEntryPointData cEntryPointData = (CEntryPointData) m.getWrapped().getEntryPointData();
+        CEntryPointData cEntryPointData = (CEntryPointData) m.getWrapped().getNativeEntryPointData();
         String docComment = cEntryPointData.getDocumentation();
         if (docComment != null && !docComment.isEmpty()) {
             writer.appendln("/*");
@@ -392,7 +393,7 @@ public abstract class NativeImage extends AbstractImage {
     }
 
     private boolean shouldWriteHeader(HostedMethod method) {
-        Object data = method.getWrapped().getEntryPointData();
+        Object data = method.getWrapped().getNativeEntryPointData();
         return data instanceof CEntryPointData && ((CEntryPointData) data).getPublishAs() == Publish.SymbolAndHeader;
     }
 
@@ -504,7 +505,7 @@ public abstract class NativeImage extends AbstractImage {
             objectFile.createDefinedSymbol(heapSection.getName(), heapSection, 0, 0, false, false);
 
             long sectionOffsetOfARelocatablePointer = writer.writeHeap(debug, heapSectionBuffer);
-            if (SpawnIsolates.getValue()) {
+            if (!ImageLayerBuildingSupport.buildingImageLayer() && SpawnIsolates.getValue()) {
                 if (heapLayout.getReadOnlyRelocatableSize() == 0) {
                     /*
                      * When there isn't a read only relocation section, the value of the relocatable
@@ -530,7 +531,10 @@ public abstract class NativeImage extends AbstractImage {
             defineDataSymbol(Isolates.IMAGE_HEAP_RELOCATABLE_BEGIN_SYMBOL_NAME, heapSection, heapLayout.getReadOnlyRelocatableOffset() - heapLayout.getStartOffset());
             defineDataSymbol(Isolates.IMAGE_HEAP_RELOCATABLE_END_SYMBOL_NAME, heapSection,
                             heapLayout.getReadOnlyRelocatableOffset() + heapLayout.getReadOnlyRelocatableSize() - heapLayout.getStartOffset());
-            defineDataSymbol(Isolates.IMAGE_HEAP_A_RELOCATABLE_POINTER_SYMBOL_NAME, heapSection, sectionOffsetOfARelocatablePointer);
+            if (!ImageLayerBuildingSupport.buildingImageLayer()) {
+                /* Layered native-image builds do not use this symbol. */
+                defineDataSymbol(Isolates.IMAGE_HEAP_A_RELOCATABLE_POINTER_SYMBOL_NAME, heapSection, sectionOffsetOfARelocatablePointer);
+            }
             defineDataSymbol(Isolates.IMAGE_HEAP_WRITABLE_BEGIN_SYMBOL_NAME, heapSection, heapLayout.getWritableOffset() - heapLayout.getStartOffset());
             defineDataSymbol(Isolates.IMAGE_HEAP_WRITABLE_END_SYMBOL_NAME, heapSection, heapLayout.getWritableOffset() + heapLayout.getWritableSize() - heapLayout.getStartOffset());
             defineDataSymbol(Isolates.IMAGE_HEAP_WRITABLE_PATCHED_BEGIN_SYMBOL_NAME, heapSection, heapLayout.getWritablePatchedOffset() - heapLayout.getStartOffset());
@@ -1005,7 +1009,7 @@ public abstract class NativeImage extends AbstractImage {
                 // 2. fq without return type -- only for entry points!
                 for (Map.Entry<String, HostedMethod> ent : methodsBySignature.entrySet()) {
                     HostedMethod method = ent.getValue();
-                    Object data = method.getWrapped().getEntryPointData();
+                    Object data = method.getWrapped().getNativeEntryPointData();
                     CEntryPointData cEntryData = (data instanceof CEntryPointData) ? (CEntryPointData) data : null;
                     if (cEntryData != null && cEntryData.getPublishAs() == Publish.NotPublished) {
                         continue;

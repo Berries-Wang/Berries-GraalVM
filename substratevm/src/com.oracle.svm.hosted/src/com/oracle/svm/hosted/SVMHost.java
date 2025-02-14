@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -56,8 +56,8 @@ import com.oracle.graal.pointsto.PointsToAnalysis;
 import com.oracle.graal.pointsto.api.HostVM;
 import com.oracle.graal.pointsto.api.PointstoOptions;
 import com.oracle.graal.pointsto.constraints.UnsupportedFeatureException;
-import com.oracle.graal.pointsto.heap.ImageLayerLoader;
 import com.oracle.graal.pointsto.infrastructure.OriginalClassProvider;
+import com.oracle.graal.pointsto.infrastructure.OriginalFieldProvider;
 import com.oracle.graal.pointsto.meta.AnalysisField;
 import com.oracle.graal.pointsto.meta.AnalysisMetaAccess;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
@@ -68,6 +68,7 @@ import com.oracle.graal.pointsto.meta.HostedProviders;
 import com.oracle.graal.pointsto.phases.InlineBeforeAnalysisGraphDecoder;
 import com.oracle.graal.pointsto.phases.InlineBeforeAnalysisPolicy;
 import com.oracle.graal.pointsto.util.GraalAccess;
+import com.oracle.svm.common.meta.GuaranteeFolded;
 import com.oracle.svm.common.meta.MultiMethod;
 import com.oracle.svm.core.BuildPhaseProvider;
 import com.oracle.svm.core.MissingRegistrationSupport;
@@ -76,6 +77,7 @@ import com.oracle.svm.core.NeverInlineTrivial;
 import com.oracle.svm.core.RuntimeAssertionsSupport;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.SubstrateOptions.OptimizationLevel;
+import com.oracle.svm.core.annotate.Delete;
 import com.oracle.svm.core.annotate.InjectAccessors;
 import com.oracle.svm.core.c.CGlobalData;
 import com.oracle.svm.core.graal.meta.SubstrateForeignCallLinkage;
@@ -86,6 +88,7 @@ import com.oracle.svm.core.heap.StoredContinuation;
 import com.oracle.svm.core.heap.Target_java_lang_ref_Reference;
 import com.oracle.svm.core.heap.UnknownClass;
 import com.oracle.svm.core.hub.DynamicHub;
+import com.oracle.svm.core.hub.DynamicHubCompanion;
 import com.oracle.svm.core.hub.HubType;
 import com.oracle.svm.core.hub.Hybrid;
 import com.oracle.svm.core.hub.PredefinedClassesSupport;
@@ -111,9 +114,11 @@ import com.oracle.svm.hosted.classinitialization.SimulateClassInitializerSupport
 import com.oracle.svm.hosted.code.InliningUtilities;
 import com.oracle.svm.hosted.code.SubstrateCompilationDirectives;
 import com.oracle.svm.hosted.code.UninterruptibleAnnotationChecker;
+import com.oracle.svm.hosted.fieldfolding.StaticFinalFieldFoldingPhase;
 import com.oracle.svm.hosted.heap.PodSupport;
 import com.oracle.svm.hosted.imagelayer.HostedDynamicLayerInfo;
 import com.oracle.svm.hosted.imagelayer.HostedImageLayerBuildingSupport;
+import com.oracle.svm.hosted.imagelayer.SVMImageLayerLoader;
 import com.oracle.svm.hosted.meta.HostedField;
 import com.oracle.svm.hosted.meta.HostedType;
 import com.oracle.svm.hosted.meta.HostedUniverse;
@@ -167,6 +172,7 @@ public class SVMHost extends HostVM {
 
     private final Map<String, Set<UsageKind>> forbiddenTypes;
     private final Platform platform;
+    private final ImageClassLoader loader;
     private final ClassInitializationSupport classInitializationSupport;
     private final LinkAtBuildTimeSupport linkAtBuildTimeSupport;
     private final HostedStringDeduplication stringTable;
@@ -195,18 +201,19 @@ public class SVMHost extends HostVM {
     private final int layerId;
     private final boolean useBaseLayer;
     private Set<Field> excludedFields;
+    private AnalysisType cGlobalData;
+    private AnalysisType optionKey;
 
     private final Boolean optionAllowUnsafeAllocationOfAllInstantiatedTypes = SubstrateOptions.AllowUnsafeAllocationOfAllInstantiatedTypes.getValue();
     private final boolean isClosedTypeWorld = SubstrateOptions.useClosedTypeWorld();
     private final boolean enableTrackAcrossLayers;
-
-    /** Modules containing all {@code svm.core} and {@code svm.hosted} classes. */
-    private final Set<Module> builderModules;
+    private final boolean enableReachableInCurrentLayer;
 
     @SuppressWarnings("this-escape")
     public SVMHost(OptionValues options, ImageClassLoader loader, ClassInitializationSupport classInitializationSupport, AnnotationSubstitutionProcessor annotationSubstitutions,
                     MissingRegistrationSupport missingRegistrationSupport) {
         super(options, loader.getClassLoader());
+        this.loader = loader;
         this.classInitializationSupport = classInitializationSupport;
         this.missingRegistrationSupport = missingRegistrationSupport;
         this.stringTable = HostedStringDeduplication.singleton();
@@ -236,7 +243,7 @@ public class SVMHost extends HostVM {
         }
 
         enableTrackAcrossLayers = ImageLayerBuildingSupport.buildingSharedLayer();
-        builderModules = ImageSingletons.contains(OpenTypeWorldFeature.class) ? ImageSingletons.lookup(OpenTypeWorldFeature.class).getBuilderModules() : null;
+        enableReachableInCurrentLayer = ImageLayerBuildingSupport.buildingExtensionLayer();
     }
 
     /**
@@ -246,7 +253,7 @@ public class SVMHost extends HostVM {
      */
     @Override
     public boolean isCoreType(AnalysisType type) {
-        return builderModules.contains(type.getJavaClass().getModule());
+        return loader.getBuilderModules().contains(type.getJavaClass().getModule());
     }
 
     @Override
@@ -259,11 +266,12 @@ public class SVMHost extends HostVM {
      * performed in the prior layer and the analysis results have been serialized. Currently, this
      * approximates to either:
      * <ol>
-     * <li>We have a strengthened graph available. See {@link ImageLayerLoader#hasStrengthenedGraph}
-     * for which strengthened graphs are persisted. Having an analysis parsed graph (see
-     * {@link ImageLayerLoader#hasAnalysisParsedGraph}) is not enough because methods with only an
-     * analysis parsed graph are inlined before analysis, but not analyzed. Additionally, having a
-     * strengthened graph implies also having an analysis parsed graph.</li>
+     * <li>We have a strengthened graph available. See
+     * {@link SVMImageLayerLoader#hasStrengthenedGraph} for which strengthened graphs are persisted.
+     * Having an analysis parsed graph (see {@link SVMImageLayerLoader#hasAnalysisParsedGraph}) is
+     * not enough because methods with only an analysis parsed graph are inlined before analysis,
+     * but not analyzed. Additionally, having a strengthened graph implies also having an analysis
+     * parsed graph.</li>
      * <li>A compile target exists this layer can call.</li>
      * </ol>
      *
@@ -271,7 +279,7 @@ public class SVMHost extends HostVM {
      */
     @Override
     public boolean analyzedInPriorLayer(AnalysisMethod method) {
-        ImageLayerLoader imageLayerLoader = HostedImageLayerBuildingSupport.singleton().getLoader();
+        SVMImageLayerLoader imageLayerLoader = HostedImageLayerBuildingSupport.singleton().getLoader();
         return imageLayerLoader.hasStrengthenedGraph(method) || HostedDynamicLayerInfo.singleton().compiledInPriorLayer(method);
     }
 
@@ -302,7 +310,7 @@ public class SVMHost extends HostVM {
 
     private void checkForbidden(AnalysisType type, UsageKind kind) {
         if (SubstrateOptions.VerifyNamingConventions.getValue()) {
-            NativeImageGenerator.checkName(type.getWrapped().toJavaName(), null, null);
+            NativeImageGenerator.checkName(null, type);
         }
 
         if (forbiddenTypes == null) {
@@ -401,7 +409,7 @@ public class SVMHost extends HostVM {
         if (optionAllowUnsafeAllocationOfAllInstantiatedTypes != null) {
             if (optionAllowUnsafeAllocationOfAllInstantiatedTypes) {
                 type.registerAsUnsafeAllocated("All types are registered as Unsafe allocated via option -H:+AllowUnsafeAllocationOfAllInstantiatedTypes");
-                typeToHub.get(type).getCompanion().setUnsafeAllocate();
+                typeToHub.get(type).setCanUnsafeAllocate();
             } else {
                 /*
                  * No default registration for unsafe allocation, setting the explicit option has
@@ -410,7 +418,7 @@ public class SVMHost extends HostVM {
             }
         } else if (!missingRegistrationSupport.reportMissingRegistrationErrors(type.getJavaClass())) {
             type.registerAsUnsafeAllocated("Type is not listed as ThrowMissingRegistrationError and therefore registered as Unsafe allocated automatically for compatibility reasons");
-            typeToHub.get(type).getCompanion().setUnsafeAllocate();
+            typeToHub.get(type).setCanUnsafeAllocate();
         }
     }
 
@@ -512,6 +520,8 @@ public class SVMHost extends HostVM {
         String simpleBinaryName = stringTable.deduplicate(getSimpleBinaryName(javaClass), true);
 
         Class<?> nestHost = javaClass.getNestHost();
+        VMError.guarantee(platformSupported(nestHost), "The NestHost %s for %s is not available in this platform.", nestHost, javaClass);
+
         boolean isHidden = javaClass.isHidden();
         boolean isRecord = javaClass.isRecord();
         boolean assertionStatus = RuntimeAssertionsSupport.singleton().desiredAssertionStatus(javaClass);
@@ -603,7 +613,7 @@ public class SVMHost extends HostVM {
         return classInitializationSupport;
     }
 
-    private static int computeHubType(AnalysisType type) {
+    private static byte computeHubType(AnalysisType type) {
         if (type.isArray()) {
             if (type.getComponentType().isPrimitive() || type.getComponentType().isWordType()) {
                 return HubType.PRIMITIVE_ARRAY;
@@ -639,12 +649,20 @@ public class SVMHost extends HostVM {
             throw new UnsupportedFeatureException(message);
         }
         if (originalClass.isRecord()) {
-            for (var recordComponent : originalClass.getRecordComponents()) {
-                if (WordBase.class.isAssignableFrom(recordComponent.getType())) {
-                    throw UserError.abort("Records cannot use Word types. " +
-                                    "The equals/hashCode/toString implementation of records uses method handles, and Word types are not supported as parameters of method handle invocations. " +
-                                    "Record type: `" + originalClass.getTypeName() + "`, component: `" + recordComponent.getName() + "` of type `" + recordComponent.getType().getTypeName() + "`");
+            try {
+                for (var recordComponent : originalClass.getRecordComponents()) {
+                    if (WordBase.class.isAssignableFrom(recordComponent.getType())) {
+                        throw UserError.abort("Records cannot use Word types. " +
+                                        "The equals/hashCode/toString implementation of records uses method handles, and Word types are not supported as parameters of method handle invocations. " +
+                                        "Record type: `" + originalClass.getTypeName() + "`, component: `" + recordComponent.getName() + "` of type `" + recordComponent.getType().getTypeName() + "`");
+                    }
                 }
+            } catch (LinkageError e) {
+                /*
+                 * If a record refers to a missing/incomplete type then Class.getRecordComponents()
+                 * will throw a LinkageError. It's safe to ignore this here since the Word type
+                 * restriction applies to VM classes which should be fully defined.
+                 */
             }
         }
     }
@@ -662,12 +680,20 @@ public class SVMHost extends HostVM {
             if (deoptsForbidden(method)) {
                 graph.getGraphState().configureExplicitExceptionsNoDeoptIfNecessary();
             }
-
             if (parsingSupport != null) {
                 parsingSupport.afterParsingHook(method, graph);
             }
 
             if (!SubstrateCompilationDirectives.isRuntimeCompiledMethod(method)) {
+                /*
+                 * All JIT-compiled classes that we care about, like Truffle languages, are
+                 * initialized at image build time. So we do not need to make the
+                 * StaticFinalFieldFoldingPhase and the nodes it references safe for execution at
+                 * image run time.
+                 */
+                if (StaticFinalFieldFoldingPhase.isEnabled() && !SubstrateCompilationDirectives.isDeoptTarget(method)) {
+                    new StaticFinalFieldFoldingPhase().apply(graph, getProviders(method.getMultiMethodKey()));
+                }
                 /*
                  * Runtime compiled methods should not have assertions. If they do, then they should
                  * be caught via the blocklist instead of being converted to bytecode exceptions.
@@ -714,7 +740,7 @@ public class SVMHost extends HostVM {
 
     @Override
     public void methodBeforeTypeFlowCreationHook(BigBang bb, AnalysisMethod method, StructuredGraph graph) {
-        if (method.isEntryPoint() && !Modifier.isStatic(graph.method().getModifiers())) {
+        if (method.isNativeEntryPoint() && !Modifier.isStatic(graph.method().getModifiers())) {
             ValueNode receiver = graph.start().stateAfter().localAt(0);
             if (receiver != null && receiver.hasUsages()) {
                 /*
@@ -880,8 +906,6 @@ public class SVMHost extends HostVM {
          * These fields need to be folded as they are used in snippets, and they must be accessed
          * without producing reads with side effects.
          */
-        excludedFields.add(ReflectionUtil.lookupField(DynamicHub.class, "arrayHub"));
-        excludedFields.add(ReflectionUtil.lookupField(DynamicHub.class, "additionalFlags"));
         excludedFields.add(ReflectionUtil.lookupField(DynamicHub.class, "layoutEncoding"));
         excludedFields.add(ReflectionUtil.lookupField(DynamicHub.class, "numClassTypes"));
         excludedFields.add(ReflectionUtil.lookupField(DynamicHub.class, "numInterfaceTypes"));
@@ -890,6 +914,9 @@ public class SVMHost extends HostVM {
         excludedFields.add(ReflectionUtil.lookupField(DynamicHub.class, "typeID"));
         excludedFields.add(ReflectionUtil.lookupField(DynamicHub.class, "monitorOffset"));
         excludedFields.add(ReflectionUtil.lookupField(DynamicHub.class, "hubType"));
+        excludedFields.add(ReflectionUtil.lookupField(DynamicHub.class, "companion"));
+        excludedFields.add(ReflectionUtil.lookupField(DynamicHubCompanion.class, "arrayHub"));
+        excludedFields.add(ReflectionUtil.lookupField(DynamicHubCompanion.class, "additionalFlags"));
 
         /* Needs to be immutable for correct lowering of SubstrateIdentityHashCodeNode. */
         excludedFields.add(ReflectionUtil.lookupField(DynamicHub.class, "identityHashOffset"));
@@ -906,6 +933,10 @@ public class SVMHost extends HostVM {
         excludedFields.add(ReflectionUtil.lookupField(NativeLibraries.class, "nativeLibraryLockMap"));
     }
 
+    /**
+     * This method cannot use an {@link AnalysisField} because it is used before the analysis is set
+     * up.
+     */
     @Override
     public boolean isFieldIncluded(BigBang bb, Field field) {
         /*
@@ -919,15 +950,16 @@ public class SVMHost extends HostVM {
         if (excludedFields.contains(field)) {
             return false;
         }
-
-        /* Fields with those names are not allowed in the image */
-        if (NativeImageGenerator.checkName(field.getType().getName() + "." + field.getName()) != null) {
-            return false;
-        }
         /* Options should not be in the image */
         if (OptionKey.class.isAssignableFrom(field.getType())) {
             return false;
         }
+
+        /* Fields that are always folded don't need to be included. */
+        if (field.getAnnotation(GuaranteeFolded.class) != null) {
+            return false;
+        }
+
         /* Fields from this package should not be in the image */
         if (field.getDeclaringClass().getName().startsWith("jdk.graal.compiler")) {
             return false;
@@ -935,8 +967,68 @@ public class SVMHost extends HostVM {
         /* Fields that are deleted or substituted should not be in the image */
         if (bb instanceof NativeImagePointsToAnalysis nativeImagePointsToAnalysis) {
             AnnotationSubstitutionProcessor annotationSubstitutionProcessor = nativeImagePointsToAnalysis.getAnnotationSubstitutionProcessor();
-            return !annotationSubstitutionProcessor.isDeleted(field) && !annotationSubstitutionProcessor.isAnnotationPresent(field, InjectAccessors.class);
+            boolean included = !annotationSubstitutionProcessor.isDeleted(field) && !annotationSubstitutionProcessor.isAnnotationPresent(field, InjectAccessors.class);
+            if (!included) {
+                return false;
+            }
         }
+
+        /* Remaining fields should match the naming conventions. */
+        if (SubstrateOptions.VerifyNamingConventions.getValue()) {
+            NativeImageGenerator.checkName(bb, field);
+        }
+
+        return super.isFieldIncluded(bb, field);
+    }
+
+    /**
+     * This method needs to be kept in sync with {@link SVMHost#isFieldIncluded(BigBang, Field)}.
+     */
+    @Override
+    public boolean isFieldIncluded(BigBang bb, AnalysisField field) {
+        /*
+         * Fields of type CGlobalData can use a CGlobalDataFactory which must not be reachable at
+         * run time
+         */
+        if (cGlobalData == null) {
+            cGlobalData = bb.getMetaAccess().lookupJavaType(CGlobalData.class);
+        }
+        if (field.getType().equals(cGlobalData)) {
+            return false;
+        }
+
+        if (excludedFields.contains(OriginalFieldProvider.getJavaField(field))) {
+            return false;
+        }
+
+        /* Options should not be in the image */
+        if (optionKey == null) {
+            optionKey = bb.getMetaAccess().lookupJavaType(OptionKey.class);
+        }
+        if (optionKey.isAssignableFrom(field.getType())) {
+            return false;
+        }
+
+        /* Fields that are always folded don't need to be included. */
+        if (field.isGuaranteeFolded()) {
+            return false;
+        }
+
+        /* Fields from this package should not be in the image */
+        if (field.getDeclaringClass().toJavaName().startsWith("jdk.graal.compiler")) {
+            return false;
+        }
+        /* Fields that are deleted or substituted should not be in the image */
+        boolean included = field.getAnnotation(Delete.class) == null && field.getAnnotation(InjectAccessors.class) == null;
+        if (!included) {
+            return false;
+        }
+
+        /* Remaining fields should match the naming conventions. */
+        if (SubstrateOptions.VerifyNamingConventions.getValue()) {
+            NativeImageGenerator.checkName(bb, field);
+        }
+
         return super.isFieldIncluded(bb, field);
     }
 
@@ -948,6 +1040,11 @@ public class SVMHost extends HostVM {
     @Override
     public boolean enableTrackAcrossLayers() {
         return enableTrackAcrossLayers;
+    }
+
+    @Override
+    public boolean enableReachableInCurrentLayer() {
+        return enableReachableInCurrentLayer;
     }
 
     private final List<BiPredicate<AnalysisMethod, AnalysisMethod>> neverInlineTrivialHandlers = new CopyOnWriteArrayList<>();

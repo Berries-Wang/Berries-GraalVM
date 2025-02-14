@@ -36,7 +36,6 @@ import org.graalvm.word.ComparableWord;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.PointerBase;
 import org.graalvm.word.UnsignedWord;
-import org.graalvm.word.WordFactory;
 
 import com.oracle.svm.core.NeverInline;
 import com.oracle.svm.core.Uninterruptible;
@@ -69,6 +68,7 @@ import jdk.graal.compiler.api.directives.GraalDirectives;
 import jdk.graal.compiler.core.common.SuppressFBWarnings;
 import jdk.graal.compiler.replacements.ReplacementsUtil;
 import jdk.graal.compiler.replacements.nodes.AssertionNode;
+import jdk.graal.compiler.word.Word;
 
 /**
  * Utility methods for the manipulation and iteration of {@link IsolateThread}s.
@@ -251,12 +251,12 @@ public abstract class VMThreads implements RuntimeOnlyImageSingleton {
          * size from the OS, we just use a hard-coded best guess. Using an inaccurate value does not
          * lead to correctness problems.
          */
-        UnsignedWord alignment = WordFactory.unsigned(64);
+        UnsignedWord alignment = Word.unsigned(64);
 
-        UnsignedWord memorySize = WordFactory.unsigned(isolateThreadSize).add(alignment);
+        UnsignedWord memorySize = Word.unsigned(isolateThreadSize).add(alignment);
         Pointer memory = UntrackedNullableNativeMemory.calloc(memorySize);
         if (memory.isNull()) {
-            return WordFactory.nullPointer();
+            return Word.nullPointer();
         }
 
         IsolateThread isolateThread = (IsolateThread) UnsignedUtils.roundUp(memory, alignment);
@@ -267,7 +267,7 @@ public abstract class VMThreads implements RuntimeOnlyImageSingleton {
     @Uninterruptible(reason = "Thread state no longer set up.")
     public void freeCurrentIsolateThread() {
         freeIsolateThread(CurrentIsolate.getCurrentThread());
-        writeCurrentVMThread(WordFactory.nullPointer());
+        writeCurrentVMThread(Word.nullPointer());
     }
 
     /** Free the native memory allocated by {@link #allocateIsolateThread}. */
@@ -371,7 +371,7 @@ public abstract class VMThreads implements RuntimeOnlyImageSingleton {
     public void detachCurrentThread() {
         threadExit();
         detachThread(CurrentIsolate.getCurrentThread(), true);
-        writeCurrentVMThread(WordFactory.nullPointer());
+        writeCurrentVMThread(Word.nullPointer());
     }
 
     /**
@@ -386,7 +386,7 @@ public abstract class VMThreads implements RuntimeOnlyImageSingleton {
         assert currentThread == (thread == CurrentIsolate.getCurrentThread());
         assert currentThread || VMOperation.isInProgressAtSafepoint();
 
-        OSThreadHandle threadToCleanup = WordFactory.nullPointer();
+        OSThreadHandle threadToCleanup = Word.nullPointer();
         if (currentThread) {
             lockThreadMutexInNativeCode(false);
         }
@@ -454,7 +454,7 @@ public abstract class VMThreads implements RuntimeOnlyImageSingleton {
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     protected void cleanupExitedOsThreads() {
-        OSThreadHandle threadToCleanup = detachedOsThreadToCleanup.getAndSet(WordFactory.nullPointer());
+        OSThreadHandle threadToCleanup = detachedOsThreadToCleanup.getAndSet(Word.nullPointer());
         cleanupExitedOsThread(threadToCleanup);
     }
 
@@ -472,7 +472,7 @@ public abstract class VMThreads implements RuntimeOnlyImageSingleton {
 
     @Uninterruptible(reason = "Thread is detaching and holds the THREAD_MUTEX.")
     private static void removeFromThreadList(IsolateThread thread) {
-        IsolateThread previous = WordFactory.nullPointer();
+        IsolateThread previous = Word.nullPointer();
         IsolateThread current = head;
         while (current.isNonNull()) {
             IsolateThread next = nextTL.get(current);
@@ -585,7 +585,7 @@ public abstract class VMThreads implements RuntimeOnlyImageSingleton {
         return OSThreadIdTL.get(thread).equal(osThreadId);
     }
 
-    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    @Uninterruptible(reason = "Locking without transition requires that the whole critical section is uninterruptible.")
     @SuppressFBWarnings(value = "UC", justification = "FB does not know that VMMutex objects are replaced, i.e., that the lock/unlock methods do not throw an error at run time.")
     public IsolateThread findIsolateThreadForCurrentOSThread(boolean inCrashHandler) {
         ThreadLookup threadLookup = ImageSingletons.lookup(ThreadLookup.class);

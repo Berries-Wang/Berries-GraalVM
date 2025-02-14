@@ -44,13 +44,13 @@ import com.oracle.graal.pointsto.AnalysisPolicy;
 import com.oracle.graal.pointsto.BigBang;
 import com.oracle.graal.pointsto.ObjectScanner;
 import com.oracle.graal.pointsto.api.HostVM;
+import com.oracle.graal.pointsto.api.ImageLayerLoader;
+import com.oracle.graal.pointsto.api.ImageLayerWriter;
 import com.oracle.graal.pointsto.constraints.UnsupportedFeatureException;
 import com.oracle.graal.pointsto.heap.HeapSnapshotVerifier;
 import com.oracle.graal.pointsto.heap.HostedValuesProvider;
 import com.oracle.graal.pointsto.heap.ImageHeapConstant;
 import com.oracle.graal.pointsto.heap.ImageHeapScanner;
-import com.oracle.graal.pointsto.heap.ImageLayerLoader;
-import com.oracle.graal.pointsto.heap.ImageLayerWriter;
 import com.oracle.graal.pointsto.infrastructure.OriginalClassProvider;
 import com.oracle.graal.pointsto.infrastructure.ResolvedSignature;
 import com.oracle.graal.pointsto.infrastructure.SubstitutionProcessor;
@@ -438,10 +438,6 @@ public class AnalysisUniverse implements Universe {
         });
 
         if (result.equals(newValue)) {
-            if (newValue.isInBaseLayer()) {
-                getImageLayerLoader().initializeBaseLayerMethod(newValue);
-            }
-
             prepareMethodImplementations(newValue);
         }
 
@@ -456,6 +452,9 @@ public class AnalysisUniverse implements Universe {
                 AnalysisMethod override = subtype.resolveConcreteMethod(method, null);
                 if (override != null && !override.equals(method)) {
                     ConcurrentLightHashSet.addElement(method, AnalysisMethod.allImplementationsUpdater, override);
+                    if (method.reachableInCurrentLayer()) {
+                        override.setReachableInCurrentLayer();
+                    }
                 }
             }
         }
@@ -599,6 +598,7 @@ public class AnalysisUniverse implements Universe {
     }
 
     public void registerUnsafeAccessedStaticField(AnalysisField field) {
+        AnalysisError.guarantee(!field.getType().isWordType(), "static Word fields cannot be unsafe accessed %s", this);
         unsafeAccessedStaticFields.put(field, true);
     }
 
