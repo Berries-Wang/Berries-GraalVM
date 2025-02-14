@@ -499,6 +499,7 @@ public final class ReflectionPlugins {
         plugins.register(reflectionMethod.getDeclaringClass(), new RequiredInvocationPlugin(reflectionMethod.getName(), parameterTypes.toArray(new Class<?>[0])) {
             @Override
             public boolean defaultHandler(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode... args) {
+                assert !reflectionMethod.getDeclaringClass().equals(ConstantTags.class) || Arrays.stream(args).allMatch(ValueNode::isConstant);
                 return foldInvocationUsingReflection(b, targetMethod, reflectionMethod, receiver, args, allowConstantFolding);
             }
         });
@@ -838,6 +839,7 @@ public final class ReflectionPlugins {
             plugins.register(ConstantTags.class, new RequiredInvocationPlugin("forName", String.class) {
                 @Override
                 public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode nameNode) {
+                    assert nameNode.isConstant();
                     return processClassForName(b, targetMethod, nameNode, ConstantNode.forBoolean(true));
                 }
             });
@@ -845,6 +847,7 @@ public final class ReflectionPlugins {
             plugins.register(ConstantTags.class, new RequiredInvocationPlugin("forName", String.class, boolean.class, ClassLoader.class) {
                 @Override
                 public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode nameNode, ValueNode initializeNode, ValueNode classLoaderNode) {
+                    assert nameNode.isConstant() && initializeNode.isConstant();
                     return processClassForName(b, targetMethod, nameNode, initializeNode);
                 }
             });
@@ -879,6 +882,7 @@ public final class ReflectionPlugins {
 
                 @Override
                 public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode clazzNode) {
+                    assert clazzNode.isConstant();
                     Object clazzValue = unbox(b, clazzNode, JavaKind.Object);
                     if (!(clazzValue instanceof Class<?>)) {
                         return false;
