@@ -24,15 +24,15 @@
  */
 package com.oracle.svm.reflectionagent;
 
-import jdk.internal.org.objectweb.asm.Type;
-import jdk.internal.org.objectweb.asm.tree.MethodInsnNode;
-import jdk.internal.org.objectweb.asm.tree.analysis.Frame;
-import jdk.internal.org.objectweb.asm.tree.analysis.SourceValue;
+import com.oracle.svm.shaded.org.objectweb.asm.Type;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.MethodInsnNode;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.analysis.Frame;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.analysis.SourceValue;
 
 import java.util.Arrays;
 import java.util.stream.Collectors;
 
-import static jdk.internal.org.objectweb.asm.Opcodes.INVOKESTATIC;
+import static com.oracle.svm.shaded.org.objectweb.asm.Opcodes.INVOKESTATIC;
 
 public final class MethodCallUtils {
 

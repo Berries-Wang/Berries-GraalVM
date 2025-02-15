@@ -46,16 +46,16 @@ import com.oracle.svm.reflectionagent.analyzers.ConstantMethodTypeAnalyzer;
 import com.oracle.svm.reflectionagent.analyzers.ConstantStringAnalyzer;
 import com.oracle.svm.reflectionagent.cfg.ControlFlowGraphAnalyzer;
 import com.oracle.svm.reflectionagent.cfg.ControlFlowGraphNode;
-import jdk.internal.org.objectweb.asm.ClassReader;
-import jdk.internal.org.objectweb.asm.ClassWriter;
-import jdk.internal.org.objectweb.asm.tree.AbstractInsnNode;
-import jdk.internal.org.objectweb.asm.tree.ClassNode;
-import jdk.internal.org.objectweb.asm.tree.MethodInsnNode;
-import jdk.internal.org.objectweb.asm.tree.MethodNode;
-import jdk.internal.org.objectweb.asm.tree.analysis.Analyzer;
-import jdk.internal.org.objectweb.asm.tree.analysis.AnalyzerException;
-import jdk.internal.org.objectweb.asm.tree.analysis.SourceInterpreter;
-import jdk.internal.org.objectweb.asm.tree.analysis.SourceValue;
+import com.oracle.svm.shaded.org.objectweb.asm.ClassReader;
+import com.oracle.svm.shaded.org.objectweb.asm.ClassWriter;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.AbstractInsnNode;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.ClassNode;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.MethodInsnNode;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.MethodNode;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.analysis.Analyzer;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.analysis.AnalyzerException;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.analysis.SourceInterpreter;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.analysis.SourceValue;
 import org.graalvm.nativeimage.c.function.CEntryPoint;
 import org.graalvm.nativeimage.c.function.CEntryPointLiteral;
 import org.graalvm.nativeimage.c.function.CFunctionPointer;
@@ -84,7 +84,7 @@ import static com.oracle.svm.core.jni.JNIObjectHandles.nullHandle;
 import static com.oracle.svm.jvmtiagentbase.Support.check;
 import static com.oracle.svm.jvmtiagentbase.Support.jniFunctions;
 import static com.oracle.svm.jvmtiagentbase.jvmti.JvmtiEvent.JVMTI_EVENT_CLASS_FILE_LOAD_HOOK;
-import static jdk.internal.org.objectweb.asm.Opcodes.INVOKESTATIC;
+import static com.oracle.svm.shaded.org.objectweb.asm.Opcodes.INVOKESTATIC;
 
 /**
  * A JVMTI agent which analyzes user provided classes and tags reflective method calls which can be

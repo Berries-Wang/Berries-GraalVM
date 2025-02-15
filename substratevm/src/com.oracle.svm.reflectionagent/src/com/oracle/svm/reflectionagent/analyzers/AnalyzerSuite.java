@@ -26,8 +26,8 @@ package com.oracle.svm.reflectionagent.analyzers;
 
 import com.oracle.svm.reflectionagent.MethodCallUtils;
 import com.oracle.svm.reflectionagent.cfg.ControlFlowGraphNode;
-import jdk.internal.org.objectweb.asm.tree.MethodInsnNode;
-import jdk.internal.org.objectweb.asm.tree.analysis.SourceValue;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.MethodInsnNode;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.analysis.SourceValue;
 
 import java.util.HashMap;
 import java.util.Map;

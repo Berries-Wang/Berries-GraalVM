@@ -24,8 +24,8 @@
  */
 package com.oracle.svm.reflectionagent.cfg;
 
-import jdk.internal.org.objectweb.asm.tree.analysis.Frame;
-import jdk.internal.org.objectweb.asm.tree.analysis.Value;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.analysis.Frame;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.analysis.Value;
 
 import java.util.HashSet;
 import java.util.Set;

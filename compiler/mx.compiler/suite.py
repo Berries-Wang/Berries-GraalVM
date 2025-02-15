@@ -120,6 +120,18 @@ suite = {
       "license" : "BSD-new",
     },
 
+    "ASM_ANALYSIS_9.7.1" : {
+      "digest" : "sha512:a8bd265c81d9bb4371cafd3f5d18f96ad79aec65031457d518c54599144d199d9feddf13b8dc822b2598b8b504a88edbd81d1f2c52991a70a6b343d8f5bb6fe5",
+      "sourceDigest" : "sha512:ddfa874109ce46473f0a2aca46880f484bc5f598fccd4ed6dd48df95257114833654d6aed07e3f28994465b8c7b02e01517fedb1fe54cb11b922b1bed97b21b8",
+      "maven" : {
+        "groupId" : "org.ow2.asm",
+        "artifactId" : "asm-analysis",
+        "version" : "9.7.1",
+      },
+      "dependencies" : ["ASM_TREE_9.7.1"],
+      "license" : "BSD-new",
+    },
+
     "HSDIS" : {
       "urlbase" : "https://lafo.ssw.uni-linz.ac.at/pub/graal-external-deps/hsdis",
       "packedResource" : True,

@@ -24,15 +24,15 @@
  */
 package com.oracle.svm.reflectionagent.analyzers;
 
-import jdk.internal.org.objectweb.asm.tree.AbstractInsnNode;
-import jdk.internal.org.objectweb.asm.tree.MethodInsnNode;
-import jdk.internal.org.objectweb.asm.tree.analysis.Frame;
-import jdk.internal.org.objectweb.asm.tree.analysis.SourceValue;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.AbstractInsnNode;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.MethodInsnNode;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.analysis.Frame;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.analysis.SourceValue;
 
 import java.util.Set;
 
-import static jdk.internal.org.objectweb.asm.Opcodes.ICONST_0;
-import static jdk.internal.org.objectweb.asm.Opcodes.ICONST_1;
+import static com.oracle.svm.shaded.org.objectweb.asm.Opcodes.ICONST_0;
+import static com.oracle.svm.shaded.org.objectweb.asm.Opcodes.ICONST_1;
 
 public class ConstantBooleanAnalyzer extends ConstantValueAnalyzer {
 

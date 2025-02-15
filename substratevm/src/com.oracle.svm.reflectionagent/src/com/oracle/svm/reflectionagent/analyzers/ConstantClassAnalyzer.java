@@ -24,18 +24,18 @@
  */
 package com.oracle.svm.reflectionagent.analyzers;
 
-import jdk.internal.org.objectweb.asm.Type;
-import jdk.internal.org.objectweb.asm.tree.AbstractInsnNode;
-import jdk.internal.org.objectweb.asm.tree.FieldInsnNode;
-import jdk.internal.org.objectweb.asm.tree.LdcInsnNode;
-import jdk.internal.org.objectweb.asm.tree.MethodInsnNode;
-import jdk.internal.org.objectweb.asm.tree.analysis.Frame;
-import jdk.internal.org.objectweb.asm.tree.analysis.SourceValue;
+import com.oracle.svm.shaded.org.objectweb.asm.Type;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.AbstractInsnNode;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.FieldInsnNode;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.LdcInsnNode;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.MethodInsnNode;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.analysis.Frame;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.analysis.SourceValue;
 
 import java.util.Set;
 
-import static jdk.internal.org.objectweb.asm.Opcodes.GETSTATIC;
-import static jdk.internal.org.objectweb.asm.Opcodes.LDC;
+import static com.oracle.svm.shaded.org.objectweb.asm.Opcodes.GETSTATIC;
+import static com.oracle.svm.shaded.org.objectweb.asm.Opcodes.LDC;
 
 public class ConstantClassAnalyzer extends ConstantValueAnalyzer {
 

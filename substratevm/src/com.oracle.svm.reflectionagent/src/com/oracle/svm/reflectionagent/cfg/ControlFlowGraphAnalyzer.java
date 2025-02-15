@@ -24,10 +24,10 @@
  */
 package com.oracle.svm.reflectionagent.cfg;
 
-import jdk.internal.org.objectweb.asm.tree.analysis.Analyzer;
-import jdk.internal.org.objectweb.asm.tree.analysis.Frame;
-import jdk.internal.org.objectweb.asm.tree.analysis.Interpreter;
-import jdk.internal.org.objectweb.asm.tree.analysis.Value;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.analysis.Analyzer;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.analysis.Frame;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.analysis.Interpreter;
+import com.oracle.svm.shaded.org.objectweb.asm.tree.analysis.Value;
 
 public class ControlFlowGraphAnalyzer<V extends Value> extends Analyzer<V> {
     public ControlFlowGraphAnalyzer(Interpreter<V> interpreter) {

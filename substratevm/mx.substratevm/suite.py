@@ -264,6 +264,7 @@ suite = {
             "shadedDependencies" : [
                 "compiler:ASM_9.7.1",
                 "compiler:ASM_TREE_9.7.1",
+                "compiler:ASM_ANALYSIS_9.7.1",
             ],
             "class" : "ShadedLibraryProject",
             "shade" : {
@@ -1557,9 +1558,6 @@ suite = {
             "requiresConcealed" : {
                 "java.base" : [
                     "jdk.internal.loader",
-                    "jdk.internal.org.objectweb.asm",
-                    "jdk.internal.org.objectweb.asm.tree",
-                    "jdk.internal.org.objectweb.asm.tree.analysis",
                 ],
             },
             "checkstyle": "com.oracle.svm.hosted",
