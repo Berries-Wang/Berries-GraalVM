@@ -824,7 +824,7 @@ public final class ReflectionPlugins {
         }
     }
 
-    private class StrictReflectionSupport {
+    private final class StrictReflectionSupport {
 
         public ResolvedJavaMethod getOriginalMethod(ResolvedJavaMethod targetMethod, MetaAccessProvider access) {
             for (Map.Entry<Method, Method> entry : ConstantTags.TAG_TO_ORIGINAL_MAPPING.entrySet()) {
